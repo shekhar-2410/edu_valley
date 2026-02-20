@@ -1,5 +1,5 @@
 // API Configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''; // Empty string means 'same host' in Vercel
 
 export const API_ENDPOINTS = {
     events: `${API_BASE_URL}/api/events`,
