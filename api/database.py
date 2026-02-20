@@ -8,7 +8,7 @@ import urllib.parse
 DB_USER = os.getenv("DB_USER", "postgres")
 DB_PASS = os.getenv("DB_PASSWORD", "Shekhar@24101995") # Your real password
 DB_HOST = os.getenv("DB_HOST", "db.seodqvmvbrxhdmjoxvrh.supabase.co")
-DB_PORT = os.getenv("DB_PORT", "5432")
+DB_PORT = os.getenv("DB_PORT", "6543")
 DB_NAME = os.getenv("DB_NAME", "postgres")
 
 # The code now handles the '@' symbol for you automatically!
