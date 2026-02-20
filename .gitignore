@@ -25,3 +25,4 @@ Thumbs.db
 Dockerfile
 docker-compose*.yml
 *.log
+.vercel
