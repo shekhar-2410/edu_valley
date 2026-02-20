@@ -1,21 +1,21 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-import database
-import models
-import schemas
+from . import database
+from . import models
+from . import schemas
 from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-
 import os
+
 # Security Configuration
-SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-school-website-nev")  # In production, set via env
+SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-school-website-nev")
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30 # 30 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
@@ -25,20 +25,17 @@ app = FastAPI(title="School Management API")
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://localhost:80",
-        "http://localhost",
-        "*",  # Allow all origins for Docker setup
-    ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Create database tables
-models.Base.metadata.create_all(bind=database.engine)
+try:
+    models.Base.metadata.create_all(bind=database.engine)
+except Exception as e:
+    print(f"Database initialization error: {e}")
 
 
 # Helper Functions
@@ -126,7 +123,7 @@ async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_d
         db.refresh(db_image)
         
         # Return URL to access this image
-        return {"url": f"http://localhost:8000/api/images/{db_image.id}", "id": db_image.id}
+        return {"url": f"/api/images/{db_image.id}", "id": db_image.id}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
