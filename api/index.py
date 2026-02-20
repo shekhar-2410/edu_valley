@@ -1,9 +1,15 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 
-from . import database
-from . import models
-from . import schemas
+import os
+import sys
+
+# Add the current directory to sys.path so that local modules can be imported
+sys.path.append(os.path.dirname(__file__))
+
+import database
+import models
+import schemas
 from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
