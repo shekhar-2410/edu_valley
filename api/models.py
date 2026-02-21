@@ -1,5 +1,13 @@
-from database import Base
-from sqlalchemy import Column, Date, DateTime, Integer, String, Text, LargeBinary
+from .database import Base
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    LargeBinary,
+)
 from sqlalchemy.sql import func
 
 
@@ -52,7 +60,6 @@ class Contact(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
-
 class StoredImage(Base):
     __tablename__ = "stored_images"
 
@@ -69,7 +76,7 @@ class Announcement(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(200), nullable=False)
     content = Column(Text, nullable=False)
-    priority = Column(String(20), default="normal")  # low, normal, high
+    priority = Column(String(20), default="normal")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -79,4 +86,4 @@ class AdminUser(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(200), nullable=False)
-    is_admin = Column(Integer, default=1)  # Using 1 for True, 0 for False as flag
+    is_admin = Column(Integer, default=1)

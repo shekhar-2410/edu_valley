@@ -1,13 +1,10 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
 import os
-import sys
 
-# Ensure local imports work on Vercel
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-import models
-import schemas
+# ✅ RELATIVE IMPORTS (CRITICAL FOR VERCEL)
+from . import models, schemas
+from . import database
 
 from fastapi import (
     Depends,
@@ -34,10 +31,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # -------------------- APP --------------------
-# app = FastAPI(
-#     title="School Management API",
-#     root_path="/api" if os.getenv("VERCEL_ENV") else ""
-# )
 app = FastAPI(title="School Management API")
 
 app.add_middleware(
@@ -51,6 +44,8 @@ app.add_middleware(
 # -------------------- GLOBAL ERROR HANDLER --------------------
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
+    # log real error in Vercel logs
+    print("ERROR:", exc)
     return Response(
         status_code=500,
         content='{"message":"Internal Server Error"}',
@@ -69,9 +64,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 # -------------------- DATABASE --------------------
 def get_db():
+    db = database.SessionLocal()
     try:
-        import database
-        db = database.SessionLocal()
         yield db
     finally:
         db.close()
@@ -85,9 +79,9 @@ async def get_current_admin(
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         email = payload.get("sub")
         if not email:
-            raise HTTPException(status_code=401)
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     except JWTError:
-        raise HTTPException(status_code=401)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
 
     user = (
         db.query(models.AdminUser)
@@ -95,7 +89,8 @@ async def get_current_admin(
         .first()
     )
     if not user or not user.is_admin:
-        raise HTTPException(status_code=401)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+
     return user
 
 # -------------------- BASIC ROUTES --------------------
@@ -122,7 +117,10 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
         .first()
     )
     if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=401, detail="Invalid credentials")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials",
+        )
 
     token = create_access_token(
         {"sub": user.email},
