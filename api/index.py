@@ -40,9 +40,26 @@ app.add_middleware(
 
 # Create database tables
 try:
+    print("Attempting to create tables...")
     models.Base.metadata.create_all(bind=database.engine)
+    print("Database tables initialized successfully")
 except Exception as e:
     print(f"Database initialization error: {e}")
+
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={
+            "message": "Internal Server Error",
+            "detail": str(exc),
+            "type": str(type(exc).__name__),
+            "path": request.url.path
+        }
+    )
 
 
 # Helper Functions
@@ -97,8 +114,9 @@ def read_root():
 
 
 @app.get("/api/ping")
+@app.get("/ping")
 def ping():
-    return {"message": "pong"}
+    return {"message": "pong", "sys_path": sys.path[:3]}
 
 
 
@@ -150,21 +168,27 @@ async def get_image(image_id: int, db: Session = Depends(get_db)):
 
 
 @app.get("/api/health")
+@app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     try:
         # Test DB connection
         from sqlalchemy import text
-        db.execute(text("SELECT 1"))
+        result = db.execute(text("SELECT 1")).fetchone()
         return {
             "status": "healthy",
             "database": "connected",
-            "environment": os.getenv("VERCEL_ENV", "local")
+            "db_result": str(result),
+            "environment": os.getenv("VERCEL_ENV", "local"),
+            "python_version": sys.version,
+            "db_host": database.DB_HOST
         }
     except Exception as e:
+        import traceback
         return {
             "status": "unhealthy",
             "database": "disconnected",
             "error": str(e),
+            "traceback": traceback.format_exc(),
             "environment": os.getenv("VERCEL_ENV", "local")
         }
 
@@ -261,8 +285,15 @@ def delete_faculty(faculty_id: int, db: Session = Depends(get_db), current_admin
 # Gallery
 @app.get("/api/gallery", response_model=List[schemas.GalleryImage])
 def get_gallery(db: Session = Depends(get_db)):
-    images = db.query(models.GalleryImage).all()
-    return images
+    try:
+        images = db.query(models.GalleryImage).all()
+        return images
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gallery database error: {str(e)}"
+        )
+
 
 
 @app.post("/api/gallery", response_model=schemas.GalleryImage)
