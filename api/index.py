@@ -108,9 +108,23 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     return user
 
 
+@app.get("/api/debug/packages")
+@app.get("/debug/packages")
+def list_packages():
+
+    import pkg_resources
+    installed_packages = {d.project_name: d.version for d in pkg_resources.working_set}
+    return {
+        "packages": installed_packages,
+        "python_version": sys.version,
+        "sys_path": sys.path
+    }
+
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to School Management API"}
+
 
 
 @app.get("/api/path/{full_path:path}")
