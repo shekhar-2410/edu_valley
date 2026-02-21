@@ -113,10 +113,20 @@ def read_root():
     return {"message": "Welcome to School Management API"}
 
 
+@app.get("/api/path/{full_path:path}")
+def show_path(full_path: str, request: Request):
+    return {
+        "full_path": full_path,
+        "request_url_path": request.url.path,
+        "message": "Debug path info"
+    }
+
+
 @app.get("/api/ping")
 @app.get("/ping")
 def ping():
     return {"message": "pong", "sys_path": sys.path[:3]}
+
 
 
 
