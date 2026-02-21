@@ -27,7 +27,10 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 
-app = FastAPI(title="School Management API")
+app = FastAPI(
+    title="School Management API",
+    root_path="/api" if os.getenv("VERCEL_ENV") else ""
+)
 
 # CORS configuration
 app.add_middleware(
@@ -38,13 +41,17 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Create database tables
-try:
-    print("Attempting to create tables...")
-    models.Base.metadata.create_all(bind=database.engine)
-    print("Database tables initialized successfully")
-except Exception as e:
-    print(f"Database initialization error: {e}")
+# Initialize database tables only on demand or via a specific endpoint
+def init_db():
+    try:
+        models.Base.metadata.create_all(bind=database.engine)
+        return True
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        return False
+
+# Skip auto-initialization at top level to avoid Vercel timeouts
+# models.Base.metadata.create_all(bind=database.engine)
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
@@ -136,7 +143,13 @@ def show_path(full_path: str, request: Request):
     }
 
 
-@app.get("/api/ping")
+@app.get("/init-db")
+def initialize_database():
+    success = init_db()
+    if success:
+        return {"message": "Database initialized successfully"}
+    return {"message": "Database initialization failed"}, 500
+
 @app.get("/ping")
 def ping():
     return {"message": "pong", "sys_path": sys.path[:3]}
@@ -191,7 +204,6 @@ async def get_image(image_id: int, db: Session = Depends(get_db)):
     return Response(content=db_image.data, media_type=db_image.content_type)
 
 
-@app.get("/api/health")
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
     try:
@@ -218,7 +230,7 @@ def health_check(db: Session = Depends(get_db)):
 
 
 # News & Events
-@app.get("/api/events", response_model=List[schemas.Event])
+@app.get("/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
     try:
         events = db.query(models.Event).order_by(models.Event.date.desc()).all()
@@ -231,7 +243,7 @@ def get_events(db: Session = Depends(get_db)):
         )
 
 
-@app.post("/api/events", response_model=schemas.Event)
+@app.post("/events", response_model=schemas.Event)
 def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_event = models.Event(**event.dict())
     db.add(db_event)
@@ -240,7 +252,7 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), curr
     return db_event
 
 
-@app.put("/api/events/{event_id}", response_model=schemas.Event)
+@app.put("/events/{event_id}", response_model=schemas.Event)
 def update_event(event_id: int, event_update: schemas.EventCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not db_event:
@@ -255,7 +267,7 @@ def update_event(event_id: int, event_update: schemas.EventCreate, db: Session =
     return db_event
 
 
-@app.delete("/api/events/{event_id}")
+@app.delete("/events/{event_id}")
 def delete_event(event_id: int, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     event = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not event:
@@ -266,13 +278,13 @@ def delete_event(event_id: int, db: Session = Depends(get_db), current_admin: mo
 
 
 # Faculty
-@app.get("/api/faculty", response_model=List[schemas.Faculty])
+@app.get("/faculty", response_model=List[schemas.Faculty])
 def get_faculty(db: Session = Depends(get_db)):
     faculty = db.query(models.Faculty).all()
     return faculty
 
 
-@app.post("/api/faculty", response_model=schemas.Faculty)
+@app.post("/faculty", response_model=schemas.Faculty)
 def create_faculty(faculty: schemas.FacultyCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_faculty = models.Faculty(**faculty.dict())
     db.add(db_faculty)
@@ -281,7 +293,7 @@ def create_faculty(faculty: schemas.FacultyCreate, db: Session = Depends(get_db)
     return db_faculty
 
 
-@app.put("/api/faculty/{faculty_id}", response_model=schemas.Faculty)
+@app.put("/faculty/{faculty_id}", response_model=schemas.Faculty)
 def update_faculty(faculty_id: int, faculty_update: schemas.FacultyCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not db_faculty:
@@ -296,7 +308,7 @@ def update_faculty(faculty_id: int, faculty_update: schemas.FacultyCreate, db: S
     return db_faculty
 
 
-@app.delete("/api/faculty/{faculty_id}")
+@app.delete("/faculty/{faculty_id}")
 def delete_faculty(faculty_id: int, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     faculty = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
     if not faculty:
@@ -307,7 +319,7 @@ def delete_faculty(faculty_id: int, db: Session = Depends(get_db), current_admin
 
 
 # Gallery
-@app.get("/api/gallery", response_model=List[schemas.GalleryImage])
+@app.get("/gallery", response_model=List[schemas.GalleryImage])
 def get_gallery(db: Session = Depends(get_db)):
     try:
         images = db.query(models.GalleryImage).all()
