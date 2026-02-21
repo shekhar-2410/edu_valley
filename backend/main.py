@@ -96,7 +96,12 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
 @app.get("/events", response_model=List[schemas.Event])
 @app.get("/api/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
-    return db.query(models.Event).order_by(models.Event.date.desc()).all()
+    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
+    items = db.query(models.Event).order_by(models.Event.date.desc()).all()
+    for item in items:
+        if item.image_url and "localhost:8000" in item.image_url:
+            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+    return items
 
 @app.post("/events", response_model=schemas.Event)
 @app.post("/api/events", response_model=schemas.Event)
