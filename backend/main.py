@@ -68,9 +68,12 @@ def root():
 
 @app.get("/health")
 def health(db: Session = Depends(get_db)):
-    from sqlalchemy import text
-    db.execute(text("SELECT 1"))
-    return {"status": "healthy", "database": "connected"}
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
 @app.get("/ping")
 def ping():
