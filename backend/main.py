@@ -111,13 +111,23 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admi
 @app.get("/faculty", response_model=List[schemas.Faculty])
 @app.get("/api/faculty", response_model=List[schemas.Faculty])
 def get_faculty(db: Session = Depends(get_db)):
-    return db.query(models.Faculty).all()
+    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
+    items = db.query(models.Faculty).all()
+    for item in items:
+        if item.image_url and "localhost:8000" in item.image_url:
+            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+    return items
 
 # Gallery
 @app.get("/gallery", response_model=List[schemas.GalleryImage])
 @app.get("/api/gallery", response_model=List[schemas.GalleryImage])
 def get_gallery(db: Session = Depends(get_db)):
-    return db.query(models.GalleryImage).all()
+    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
+    items = db.query(models.GalleryImage).all()
+    for item in items:
+        if item.image_url and "localhost:8000" in item.image_url:
+            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+    return items
 
 # Contacts
 @app.post("/contacts", response_model=schemas.Contact)
@@ -134,6 +144,15 @@ def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)
 @app.get("/api/announcements", response_model=List[schemas.Announcement])
 def get_announcements(db: Session = Depends(get_db)):
     return db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all()
+
+# Image Serving
+@app.get("/images/{image_id}")
+@app.get("/api/images/{image_id}")
+def get_image(image_id: int, db: Session = Depends(get_db)):
+    image = db.query(models.StoredImage).filter(models.StoredImage.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    return Response(content=image.data, media_type=image.content_type)
 
 if __name__ == "__main__":
     import uvicorn
