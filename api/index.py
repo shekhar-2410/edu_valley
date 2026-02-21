@@ -34,10 +34,11 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 # -------------------- APP --------------------
-app = FastAPI(
-    title="School Management API",
-    root_path="/api" if os.getenv("VERCEL_ENV") else ""
-)
+# app = FastAPI(
+#     title="School Management API",
+#     root_path="/api" if os.getenv("VERCEL_ENV") else ""
+# )
+app = FastAPI(title="School Management API")
 
 app.add_middleware(
     CORSMiddleware,
