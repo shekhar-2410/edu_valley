@@ -1,41 +1,33 @@
 import os
-import urllib.parse
 from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, declarative_base
+from sqlalchemy.pool import NullPool
 
-# Configuration
-# Default fallback URL using standard port 5432 and sslmode=require
-DEFAULT_DB_URL = "postgresql://postgres:Shekhar%4024101995@db.seodqvmvbrxhdmjoxvrh.supabase.co:5432/postgres?sslmode=require"
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Preferred: DATABASE_URL from environment
-SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not DATABASE_URL:
+    # During build/local dev if env is missing, we might want a fallback or error
+    # For Vercel production, this MUST be set.
+    if os.getenv("VERCEL_ENV"):
+        raise RuntimeError("DATABASE_URL is not set")
+    else:
+        # Local development fallback
+        DATABASE_URL = "postgresql://postgres:Shekhar%4024101995@db.seodqvmvbrxhdmjoxvrh.supabase.co:5432/postgres?sslmode=require"
 
-if not SQLALCHEMY_DATABASE_URL:
-    SQLALCHEMY_DATABASE_URL = DEFAULT_DB_URL
+# Normalize postgres scheme
+if DATABASE_URL.startswith("postgres://"):
+    DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Clean up the URL for Vercel/Postgres compatibility (e.g. postgres:// -> postgresql://)
-if SQLALCHEMY_DATABASE_URL.startswith("postgres://"):
-    SQLALCHEMY_DATABASE_URL = SQLALCHEMY_DATABASE_URL.replace("postgres://", "postgresql://", 1)
+# Ensure SSL for Supabase
+if "sslmode" not in DATABASE_URL:
+    sep = "&" if "?" in DATABASE_URL else "?"
+    DATABASE_URL += f"{sep}sslmode=require"
 
-# Ensure SSL is enabled if not already in URL
-if "sslmode" not in SQLALCHEMY_DATABASE_URL:
-    separator = "&" if "?" in SQLALCHEMY_DATABASE_URL else "?"
-    SQLALCHEMY_DATABASE_URL += f"{separator}sslmode=require"
-
-# Define DB_HOST for diagnostic purposes
-try:
-    DB_HOST = SQLALCHEMY_DATABASE_URL.split("@")[1].split(":")[0]
-except:
-    DB_HOST = "unknown"
-
-# Create the engine with serverless-friendly settings
+# engine with NullPool to disable pooling for serverless
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL,
-    pool_size=5,
-    max_overflow=0,
+    DATABASE_URL,
+    poolclass=NullPool,
     pool_pre_ping=True,
-    pool_recycle=300,
     connect_args={
         "connect_timeout": 30
     }
@@ -43,3 +35,9 @@ engine = create_engine(
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
+
+# Export DB_HOST for compatibility with index.py diagnostics
+try:
+    DB_HOST = DATABASE_URL.split("@")[1].split(":")[0]
+except:
+    DB_HOST = "unknown"
