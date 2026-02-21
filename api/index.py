@@ -28,7 +28,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 app = FastAPI(
     title="School Management API",
-    root_path="/api" if os.getenv("VERCEL_ENV") else ""
+    root_path="/api" if os.getenv("VERCEL") or os.getenv("VERCEL_ENV") else ""
 )
 
 # CORS configuration
@@ -52,6 +52,21 @@ async def global_exception_handler(request: Request, exc: Exception):
         content=f'{{"message":"Internal Server Error","detail":"{str(exc)}","type":"{type(exc).__name__}","path":"{request.url.path}"}}',
         media_type="application/json"
     )
+
+@app.exception_handler(404)
+async def not_found_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=404,
+        content={
+            "detail": "Not Found",
+            "path": request.url.path,
+            "root_path": app.root_path,
+            "headers": dict(request.headers),
+            "method": request.method
+        }
+    )
+
+from fastapi.responses import JSONResponse
 
 # Helper Functions
 def verify_password(plain_password, hashed_password):
