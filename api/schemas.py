@@ -1,10 +1,9 @@
 from datetime import date, datetime
 from typing import Optional
-
 from pydantic import BaseModel
 
 
-# Event Schemas
+# ---------------- Event ----------------
 class EventBase(BaseModel):
     title: str
     description: str
@@ -22,10 +21,10 @@ class Event(EventBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-# Faculty Schemas
+# ---------------- Faculty ----------------
 class FacultyBase(BaseModel):
     name: str
     position: str
@@ -45,10 +44,10 @@ class Faculty(FacultyBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-# Gallery Schemas
+# ---------------- Gallery ----------------
 class GalleryImageBase(BaseModel):
     title: str
     image_url: str
@@ -65,10 +64,10 @@ class GalleryImage(GalleryImageBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-# Contact Schemas
+# ---------------- Contact ----------------
 class ContactBase(BaseModel):
     name: str
     email: str
@@ -86,10 +85,10 @@ class Contact(ContactBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-# Announcement Schemas
+# ---------------- Announcement ----------------
 class AnnouncementBase(BaseModel):
     title: str
     content: str
@@ -105,10 +104,10 @@ class Announcement(AnnouncementBase):
     created_at: datetime
 
     class Config:
-        from_attributes = True
+        orm_mode = True
 
 
-# Auth Schemas
+# ---------------- Auth ----------------
 class Token(BaseModel):
     access_token: str
     token_type: str
