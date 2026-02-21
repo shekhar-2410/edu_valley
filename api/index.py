@@ -115,7 +115,6 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     return user
 
 
-@app.get("/api/debug/packages")
 @app.get("/debug/packages")
 def list_packages():
 
@@ -134,7 +133,7 @@ def read_root():
 
 
 
-@app.get("/api/path/{full_path:path}")
+@app.get("/path/{full_path:path}")
 def show_path(full_path: str, request: Request):
     return {
         "full_path": full_path,
@@ -158,7 +157,7 @@ def ping():
 
 
 # Auth Routes
-@app.post("/api/auth/login", response_model=schemas.Token)
+@app.post("/auth/login", response_model=schemas.Token)
 def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.AdminUser).filter(models.AdminUser.email == login_data.email).first()
     if not user or not verify_password(login_data.password, user.hashed_password):
@@ -177,7 +176,7 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
 
 
 # Image Upload
-@app.post("/api/upload")
+@app.post("/upload")
 async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_db)):
     try:
         data = await file.read()
@@ -195,7 +194,7 @@ async def upload_image(file: UploadFile = File(...), db: Session = Depends(get_d
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/api/images/{image_id}")
+@app.get("/images/{image_id}")
 async def get_image(image_id: int, db: Session = Depends(get_db)):
     db_image = db.query(models.StoredImage).filter(models.StoredImage.id == image_id).first()
     if not db_image:
@@ -332,7 +331,7 @@ def get_gallery(db: Session = Depends(get_db)):
 
 
 
-@app.post("/api/gallery", response_model=schemas.GalleryImage)
+@app.post("/gallery", response_model=schemas.GalleryImage)
 def create_gallery_image(
     image: schemas.GalleryImageCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)
 ):
@@ -343,7 +342,7 @@ def create_gallery_image(
     return db_image
 
 
-@app.put("/api/gallery/{image_id}", response_model=schemas.GalleryImage)
+@app.put("/gallery/{image_id}", response_model=schemas.GalleryImage)
 def update_gallery_image(image_id: int, image_update: schemas.GalleryImageCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_image = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
     if not db_image:
@@ -358,7 +357,7 @@ def update_gallery_image(image_id: int, image_update: schemas.GalleryImageCreate
     return db_image
 
 
-@app.delete("/api/gallery/{image_id}")
+@app.delete("/gallery/{image_id}")
 def delete_gallery_image(image_id: int, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     image = (
         db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
@@ -371,13 +370,13 @@ def delete_gallery_image(image_id: int, db: Session = Depends(get_db), current_a
 
 
 # Contact Messages
-@app.get("/api/contacts", response_model=List[schemas.Contact])
+@app.get("/contacts", response_model=List[schemas.Contact])
 def get_contacts(db: Session = Depends(get_db)):
     contacts = db.query(models.Contact).order_by(models.Contact.created_at.desc()).all()
     return contacts
 
 
-@app.post("/api/contacts", response_model=schemas.Contact)
+@app.post("/contacts", response_model=schemas.Contact)
 def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)):
     db_contact = models.Contact(**contact.dict())
     db.add(db_contact)
@@ -386,7 +385,7 @@ def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)
     return db_contact
 
 
-@app.delete("/api/contacts/{contact_id}")
+@app.delete("/contacts/{contact_id}")
 def delete_contact(contact_id: int, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     contact = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
     if not contact:
@@ -397,7 +396,7 @@ def delete_contact(contact_id: int, db: Session = Depends(get_db), current_admin
 
 
 # Announcements
-@app.get("/api/announcements", response_model=List[schemas.Announcement])
+@app.get("/announcements", response_model=List[schemas.Announcement])
 def get_announcements(db: Session = Depends(get_db)):
     announcements = (
         db.query(models.Announcement)
@@ -407,7 +406,7 @@ def get_announcements(db: Session = Depends(get_db)):
     return announcements
 
 
-@app.post("/api/announcements", response_model=schemas.Announcement)
+@app.post("/announcements", response_model=schemas.Announcement)
 def create_announcement(
     announcement: schemas.AnnouncementCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)
 ):
@@ -418,7 +417,7 @@ def create_announcement(
     return db_announcement
 
 
-@app.put("/api/announcements/{announcement_id}", response_model=schemas.Announcement)
+@app.put("/announcements/{announcement_id}", response_model=schemas.Announcement)
 def update_announcement(announcement_id: int, announcement_update: schemas.AnnouncementCreate, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     db_announcement = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
     if not db_announcement:
@@ -433,7 +432,7 @@ def update_announcement(announcement_id: int, announcement_update: schemas.Annou
     return db_announcement
 
 
-@app.delete("/api/announcements/{announcement_id}")
+@app.delete("/announcements/{announcement_id}")
 def delete_announcement(announcement_id: int, db: Session = Depends(get_db), current_admin: models.AdminUser = Depends(get_current_admin)):
     announcement = (
         db.query(models.Announcement)
