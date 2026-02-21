@@ -1,5 +1,5 @@
 from database import Base
-from sqlalchemy import Column, Date, DateTime, Integer, String, Text, LargeBinary
+from sqlalchemy import Column, Date, DateTime, Integer, String, Text, LargeBinary, Boolean
 from sqlalchemy.sql import func
 
 
@@ -79,4 +79,4 @@ class AdminUser(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String(100), unique=True, nullable=False)
     hashed_password = Column(String(200), nullable=False)
-    is_admin = Column(Integer, default=1)  # Using 1 for True, 0 for False as flag
+    is_admin = Column(Boolean, default=True)
