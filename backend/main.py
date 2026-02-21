@@ -63,10 +63,12 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
 
 # Basic Routes
 @app.get("/")
+@app.get("/api")
 def root():
     return {"message": "Edu Valley API running on Render"}
 
 @app.get("/health")
+@app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     try:
         from sqlalchemy import text
@@ -76,11 +78,13 @@ def health(db: Session = Depends(get_db)):
         return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
 
 @app.get("/ping")
+@app.get("/api/ping")
 def ping():
     return {"message": "pong"}
 
 # Auth
 @app.post("/auth/login", response_model=schemas.Token)
+@app.post("/api/auth/login", response_model=schemas.Token)
 def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
     user = db.query(models.AdminUser).filter(models.AdminUser.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
@@ -90,10 +94,12 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
 
 # News & Events
 @app.get("/events", response_model=List[schemas.Event])
+@app.get("/api/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
     return db.query(models.Event).order_by(models.Event.date.desc()).all()
 
 @app.post("/events", response_model=schemas.Event)
+@app.post("/api/events", response_model=schemas.Event)
 def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
     obj = models.Event(**event.dict())
     db.add(obj)
@@ -103,16 +109,19 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admi
 
 # Faculty
 @app.get("/faculty", response_model=List[schemas.Faculty])
+@app.get("/api/faculty", response_model=List[schemas.Faculty])
 def get_faculty(db: Session = Depends(get_db)):
     return db.query(models.Faculty).all()
 
 # Gallery
 @app.get("/gallery", response_model=List[schemas.GalleryImage])
+@app.get("/api/gallery", response_model=List[schemas.GalleryImage])
 def get_gallery(db: Session = Depends(get_db)):
     return db.query(models.GalleryImage).all()
 
 # Contacts
 @app.post("/contacts", response_model=schemas.Contact)
+@app.post("/api/contacts", response_model=schemas.Contact)
 def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)):
     obj = models.Contact(**contact.dict())
     db.add(obj)
@@ -122,6 +131,7 @@ def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)
 
 # Announcements
 @app.get("/announcements", response_model=List[schemas.Announcement])
+@app.get("/api/announcements", response_model=List[schemas.Announcement])
 def get_announcements(db: Session = Depends(get_db)):
     return db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all()
 
