@@ -1,6 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 from pydantic import BaseModel
+from pydantic import ConfigDict
 
 
 # ---------------- Event ----------------
@@ -20,8 +21,7 @@ class Event(EventBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------- Faculty ----------------
@@ -43,8 +43,7 @@ class Faculty(FacultyBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------- Gallery ----------------
@@ -63,8 +62,7 @@ class GalleryImage(GalleryImageBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------- Contact ----------------
@@ -84,8 +82,7 @@ class Contact(ContactBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------- Announcement ----------------
@@ -103,8 +100,7 @@ class Announcement(AnnouncementBase):
     id: int
     created_at: datetime
 
-    class Config:
-        orm_mode = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # ---------------- Auth ----------------

@@ -42,15 +42,15 @@ app.add_middleware(
 )
 
 # -------------------- GLOBAL ERROR HANDLER --------------------
-@app.exception_handler(Exception)
-async def global_exception_handler(request: Request, exc: Exception):
-    # log real error in Vercel logs
-    print("ERROR:", exc)
-    return Response(
-        status_code=500,
-        content='{"message":"Internal Server Error"}',
-        media_type="application/json",
-    )
+# @app.exception_handler(Exception)
+# async def global_exception_handler(request: Request, exc: Exception):
+#     # log real error in Vercel logs
+#     print("ERROR:", exc)
+#     return Response(
+#         status_code=500,
+#         content='{"message":"Internal Server Error"}',
+#         media_type="application/json",
+#     )
 
 # -------------------- HELPERS --------------------
 def verify_password(plain, hashed):
