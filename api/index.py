@@ -5,7 +5,8 @@ import os
 import sys
 
 # Add the current directory to sys.path so that local modules can be imported
-sys.path.append(os.path.dirname(__file__))
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 
 import database
 import models
@@ -95,6 +96,12 @@ def read_root():
     return {"message": "Welcome to School Management API"}
 
 
+@app.get("/api/ping")
+def ping():
+    return {"message": "pong"}
+
+
+
 # Auth Routes
 @app.post("/api/auth/login", response_model=schemas.Token)
 def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
@@ -142,11 +149,38 @@ async def get_image(image_id: int, db: Session = Depends(get_db)):
     return Response(content=db_image.data, media_type=db_image.content_type)
 
 
+@app.get("/api/health")
+def health_check(db: Session = Depends(get_db)):
+    try:
+        # Test DB connection
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "environment": os.getenv("VERCEL_ENV", "local")
+        }
+    except Exception as e:
+        return {
+            "status": "unhealthy",
+            "database": "disconnected",
+            "error": str(e),
+            "environment": os.getenv("VERCEL_ENV", "local")
+        }
+
+
 # News & Events
 @app.get("/api/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
-    events = db.query(models.Event).order_by(models.Event.date.desc()).all()
-    return events
+    try:
+        events = db.query(models.Event).order_by(models.Event.date.desc()).all()
+        return events
+    except Exception as e:
+        print(f"Error fetching events: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Database error: {str(e)}"
+        )
 
 
 @app.post("/api/events", response_model=schemas.Event)
