@@ -1,23 +1,20 @@
 from typing import List, Optional
 from datetime import datetime, timedelta
-
 import os
 import sys
 
 # Add the current directory to sys.path so that local modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-
-import database
+# import lightweight things; avoid DB work until a request needs it
 import models
 import schemas
-from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Response
+from fastapi import Depends, FastAPI, HTTPException, status, File, UploadFile, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-import os
 
 # Security Configuration
 SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-for-school-website-nev")
@@ -25,7 +22,9 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+
+# Use a relative token URL so root_path (e.g. '/api') gets prefixed automatically by FastAPI
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
 app = FastAPI(
     title="School Management API",
@@ -41,33 +40,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize database tables only on demand or via a specific endpoint
-def init_db():
-    try:
-        models.Base.metadata.create_all(bind=database.engine)
-        return True
-    except Exception as e:
-        print(f"Database initialization error: {e}")
-        return False
-
-# Skip auto-initialization at top level to avoid Vercel timeouts
-# models.Base.metadata.create_all(bind=database.engine)
-
-from fastapi import Request
-from fastapi.responses import JSONResponse
-
+# Exception handler - do not leak sensitive info in production
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
-    return JSONResponse(
+    # In production respond with a minimal message.
+    if os.getenv("VERCEL_ENV") == "production":
+        return Response(status_code=500, content='{"message":"Internal Server Error"}', media_type="application/json")
+    # For non-prod (or debugging) return a bit more detail:
+    return Response(
         status_code=500,
-        content={
-            "message": "Internal Server Error",
-            "detail": str(exc),
-            "type": str(type(exc).__name__),
-            "path": request.url.path
-        }
+        content=f'{{"message":"Internal Server Error","detail":"{str(exc)}","type":"{type(exc).__name__}","path":"{request.url.path}"}}',
+        media_type="application/json"
     )
-
 
 # Helper Functions
 def verify_password(plain_password, hashed_password):
@@ -84,16 +68,33 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
-
-# Dependency
+# DB session dependency - lazy import and robust errors
 def get_db():
-    db = database.SessionLocal()
+    try:
+        import database  # local import so import-time errors in database.py don't break app import
+    except Exception as e:
+        # If database module cannot be imported, raise 503 so endpoint callers see service-unavailable
+        raise HTTPException(status_code=503, detail="Database module import failed") from e
+
+    try:
+        SessionLocal = getattr(database, "SessionLocal")
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="Database session not configured") from e
+
+    try:
+        db = SessionLocal()
+    except Exception as e:
+        raise HTTPException(status_code=503, detail="Could not create database session") from e
+
     try:
         yield db
     finally:
-        db.close()
+        try:
+            db.close()
+        except Exception:
+            pass
 
-
+# current admin dependency unchanged
 async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -114,33 +115,31 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
         raise credentials_exception
     return user
 
-
+# simple debug endpoints (unchanged)
 @app.get("/debug/packages")
 def list_packages():
-
     import pkg_resources
     installed_packages = {d.project_name: d.version for d in pkg_resources.working_set}
-    return {
-        "packages": installed_packages,
-        "python_version": sys.version,
-        "sys_path": sys.path
-    }
-
+    import sys as _sys
+    return {"packages": installed_packages, "python_version": _sys.version, "sys_path": sys.path}
 
 @app.get("/")
 def read_root():
     return {"message": "Welcome to School Management API"}
 
-
-
 @app.get("/path/{full_path:path}")
 def show_path(full_path: str, request: Request):
-    return {
-        "full_path": full_path,
-        "request_url_path": request.url.path,
-        "message": "Debug path info"
-    }
+    return {"full_path": full_path, "request_url_path": request.url.path, "message": "Debug path info"}
 
+# init DB endpoint (keeps your safe init approach)
+def init_db():
+    try:
+        import database
+        models.Base.metadata.create_all(bind=database.engine)
+        return True
+    except Exception as e:
+        print(f"Database initialization error: {e}")
+        return False
 
 @app.get("/init-db")
 def initialize_database():
@@ -153,8 +152,19 @@ def initialize_database():
 def ping():
     return {"message": "pong", "sys_path": sys.path[:3]}
 
+# health - do not reference database.DB_HOST directly; read DATABASE_URL instead
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    try:
+        from sqlalchemy import text
+        result = db.execute(text("SELECT 1")).fetchone()
+        db_url = os.getenv("DATABASE_URL", "not-set")
+        return {"status": "healthy", "database": "connected", "db_result": str(result), "environment": os.getenv("VERCEL_ENV", "local"), "database_url": ("set" if db_url != "not-set" else "not-set")}
+    except Exception as e:
+        import traceback
+        return {"status": "unhealthy", "database": "disconnected", "error": str(e), "traceback": traceback.format_exc(), "environment": os.getenv("VERCEL_ENV", "local")}
 
-
+# --- API Endpoints ---
 
 # Auth Routes
 @app.post("/auth/login", response_model=schemas.Token)
@@ -172,7 +182,6 @@ def login(login_data: schemas.LoginRequest, db: Session = Depends(get_db)):
         data={"sub": user.email}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
-
 
 
 # Image Upload
@@ -203,31 +212,6 @@ async def get_image(image_id: int, db: Session = Depends(get_db)):
     return Response(content=db_image.data, media_type=db_image.content_type)
 
 
-@app.get("/health")
-def health_check(db: Session = Depends(get_db)):
-    try:
-        # Test DB connection
-        from sqlalchemy import text
-        result = db.execute(text("SELECT 1")).fetchone()
-        return {
-            "status": "healthy",
-            "database": "connected",
-            "db_result": str(result),
-            "environment": os.getenv("VERCEL_ENV", "local"),
-            "python_version": sys.version,
-            "db_host": database.DB_HOST
-        }
-    except Exception as e:
-        import traceback
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(e),
-            "traceback": traceback.format_exc(),
-            "environment": os.getenv("VERCEL_ENV", "local")
-        }
-
-
 # News & Events
 @app.get("/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
@@ -235,11 +219,7 @@ def get_events(db: Session = Depends(get_db)):
         events = db.query(models.Event).order_by(models.Event.date.desc()).all()
         return events
     except Exception as e:
-        print(f"Error fetching events: {e}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"Database error: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.post("/events", response_model=schemas.Event)
@@ -324,11 +304,7 @@ def get_gallery(db: Session = Depends(get_db)):
         images = db.query(models.GalleryImage).all()
         return images
     except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Gallery database error: {str(e)}"
-        )
-
+        raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 @app.post("/gallery", response_model=schemas.GalleryImage)
@@ -445,8 +421,7 @@ def delete_announcement(announcement_id: int, db: Session = Depends(get_db), cur
     db.commit()
     return {"message": "Announcement deleted"}
 
-
+# Keep uvicorn.run only for local development. Vercel won't execute this block.
 if __name__ == "__main__":
     import uvicorn
-
     uvicorn.run(app, host="0.0.0.0", port=8000)
