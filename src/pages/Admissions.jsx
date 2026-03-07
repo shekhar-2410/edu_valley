@@ -6,10 +6,7 @@ const Admissions = () => {
     const { t } = useTranslation()
 
     const currentYear = new Date().getFullYear()
-    const currentMonth = new Date().getMonth()
-    const startYear = currentMonth < 3 ? currentYear - 1 : currentYear
-    const endYear = (startYear + 1).toString().slice(-2)
-    const academicYear = `${startYear}-${endYear}`
+    const academicYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`
 
     const steps = [
         {
