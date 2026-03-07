@@ -98,7 +98,7 @@ const Home = () => {
                                 </div>
                                 <div className="flex items-center gap-3 font-bold text-brand-navy-700">
                                     <div className="w-12 h-12 rounded-2xl bg-brand-gold-50 text-brand-gold-600 flex items-center justify-center shadow-sm border border-brand-gold-100"><CheckCircle2 size={24} /></div>
-                                    <span className="text-lg">{t('home.expert_staff')}</span>
+                                    <span className="text-lg">{t('home.expert_teachers')}</span>
                                 </div>
                             </div>
                         </div>
