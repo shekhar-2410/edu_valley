@@ -95,7 +95,7 @@ const Admin = () => {
                                     }`}
                                     onClick={() => setShowAddForm(!showAddForm)}
                                 >
-                                    {showAddForm ? 'Hide Form' : `Add ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1, -1)}`}
+                                    {showAddForm ? 'Hide Form' : `Add ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
                                 </button>
                             <button 
                                 className="inline-flex items-center justify-center p-4 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-2xl transition-all active:scale-95" 
