@@ -118,11 +118,16 @@ def ping():
 @app.post("/auth/login", response_model=schemas.Token)
 @app.post("/api/auth/login", response_model=schemas.Token)
 def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(models.AdminUser).filter(models.AdminUser.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
-    token = create_access_token({"sub": user.email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
-    return {"access_token": token, "token_type": "bearer"}
+    try:
+        user = db.query(models.AdminUser).filter(models.AdminUser.email == data.email).first()
+        if not user or not verify_password(data.password, user.hashed_password):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+        token = create_access_token({"sub": user.email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+        return {"access_token": token, "token_type": "bearer"}
+    except Exception as e:
+        import traceback
+        error_msg = traceback.format_exc()
+        raise HTTPException(status_code=500, detail=str(error_msg))
 
 # News & Events
 @app.get("/events", response_model=List[schemas.Event])
