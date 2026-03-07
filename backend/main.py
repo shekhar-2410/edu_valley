@@ -1,11 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, status, File, UploadFile, Response
+from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
+import hashlib
 import os
 
 import models
@@ -30,6 +31,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
+# Base URL for image URL rewriting
+RENDER_BASE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
+
 # DB dependency
 def get_db():
     db = SessionLocal()
@@ -42,9 +46,15 @@ def get_db():
 def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
+def fix_image_url(url: Optional[str]) -> Optional[str]:
+    """Replace localhost URLs with the production base URL."""
+    if url and "localhost:8000" in url:
+        return url.replace("http://localhost:8000", RENDER_BASE_URL)
+    return url
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=15))
+    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
@@ -75,7 +85,7 @@ def health(db: Session = Depends(get_db)):
         db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
     except Exception as e:
-        return {"status": "unhealthy", "database": "disconnected", "error": str(e)}
+        return {"status": "unhealthy", "database": "disconnected"}
 
 @app.get("/ping")
 @app.get("/api/ping")
@@ -96,11 +106,9 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
 @app.get("/events", response_model=List[schemas.Event])
 @app.get("/api/events", response_model=List[schemas.Event])
 def get_events(db: Session = Depends(get_db)):
-    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
     items = db.query(models.Event).order_by(models.Event.date.desc()).all()
     for item in items:
-        if item.image_url and "localhost:8000" in item.image_url:
-            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+        item.image_url = fix_image_url(item.image_url)
     return items
 
 @app.post("/events", response_model=schemas.Event)
@@ -112,29 +120,78 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admi
     db.refresh(obj)
     return obj
 
+@app.delete("/events/{event_id}")
+@app.delete("/api/events/{event_id}")
+def delete_event(event_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Event not found")
+    db.delete(obj)
+    db.commit()
+    return {"detail": "Event deleted"}
+
 # Faculty
 @app.get("/faculty", response_model=List[schemas.Faculty])
 @app.get("/api/faculty", response_model=List[schemas.Faculty])
 def get_faculty(db: Session = Depends(get_db)):
-    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
     items = db.query(models.Faculty).all()
     for item in items:
-        if item.image_url and "localhost:8000" in item.image_url:
-            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+        item.image_url = fix_image_url(item.image_url)
     return items
+
+@app.post("/faculty", response_model=schemas.Faculty)
+@app.post("/api/faculty", response_model=schemas.Faculty)
+def create_faculty(faculty: schemas.FacultyCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = models.Faculty(**faculty.dict())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+@app.delete("/faculty/{faculty_id}")
+@app.delete("/api/faculty/{faculty_id}")
+def delete_faculty(faculty_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    db.delete(obj)
+    db.commit()
+    return {"detail": "Faculty deleted"}
 
 # Gallery
 @app.get("/gallery", response_model=List[schemas.GalleryImage])
 @app.get("/api/gallery", response_model=List[schemas.GalleryImage])
 def get_gallery(db: Session = Depends(get_db)):
-    base_url = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
     items = db.query(models.GalleryImage).all()
     for item in items:
-        if item.image_url and "localhost:8000" in item.image_url:
-            item.image_url = item.image_url.replace("http://localhost:8000", base_url)
+        item.image_url = fix_image_url(item.image_url)
     return items
 
+@app.post("/gallery", response_model=schemas.GalleryImage)
+@app.post("/api/gallery", response_model=schemas.GalleryImage)
+def create_gallery(image: schemas.GalleryImageCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = models.GalleryImage(**image.dict())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+@app.delete("/gallery/{image_id}")
+@app.delete("/api/gallery/{image_id}")
+def delete_gallery(image_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Gallery image not found")
+    db.delete(obj)
+    db.commit()
+    return {"detail": "Gallery image deleted"}
+
 # Contacts
+@app.get("/contacts", response_model=List[schemas.Contact])
+@app.get("/api/contacts", response_model=List[schemas.Contact])
+def get_contacts(db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    return db.query(models.Contact).order_by(models.Contact.created_at.desc()).all()
+
 @app.post("/contacts", response_model=schemas.Contact)
 @app.post("/api/contacts", response_model=schemas.Contact)
 def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)):
@@ -144,20 +201,57 @@ def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)
     db.refresh(obj)
     return obj
 
+@app.delete("/contacts/{contact_id}")
+@app.delete("/api/contacts/{contact_id}")
+def delete_contact(contact_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    db.delete(obj)
+    db.commit()
+    return {"detail": "Contact deleted"}
+
 # Announcements
 @app.get("/announcements", response_model=List[schemas.Announcement])
 @app.get("/api/announcements", response_model=List[schemas.Announcement])
 def get_announcements(db: Session = Depends(get_db)):
     return db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all()
 
-# Image Serving
+@app.post("/announcements", response_model=schemas.Announcement)
+@app.post("/api/announcements", response_model=schemas.Announcement)
+def create_announcement(announcement: schemas.AnnouncementCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = models.Announcement(**announcement.dict())
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+@app.delete("/announcements/{announcement_id}")
+@app.delete("/api/announcements/{announcement_id}")
+def delete_announcement(announcement_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    db.delete(obj)
+    db.commit()
+    return {"detail": "Announcement deleted"}
+
+# Image Serving (with caching headers)
 @app.get("/images/{image_id}")
 @app.get("/api/images/{image_id}")
 def get_image(image_id: int, db: Session = Depends(get_db)):
     image = db.query(models.StoredImage).filter(models.StoredImage.id == image_id).first()
     if not image:
         raise HTTPException(status_code=404, detail="Image not found")
-    return Response(content=image.data, media_type=image.content_type)
+    etag = hashlib.md5(image.data[:1024]).hexdigest()
+    return Response(
+        content=image.data,
+        media_type=image.content_type,
+        headers={
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            "ETag": f'"{etag}"',
+        },
+    )
 
 if __name__ == "__main__":
     import uvicorn

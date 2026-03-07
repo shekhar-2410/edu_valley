@@ -1,10 +1,10 @@
-const Card = ({ 
-    children, 
-    className = '', 
-    padding = 'md', 
+const Card = ({
+    children,
+    className = '',
+    padding = 'md',
     hover = true,
     animate = false,
-    ...props 
+    ...props
 }) => {
     const paddings = {
         none: "p-0",
@@ -13,12 +13,12 @@ const Card = ({
         lg: "p-12 md:p-16"
     };
 
-    const baseStyles = "bg-white rounded-[2.5rem] border border-slate-100 shadow-xl shadow-slate-200/50 overflow-hidden transition-all duration-300";
+    const baseStyles = "bg-white rounded-[2.5rem] border border-brand-navy-100/50 shadow-xl shadow-brand-navy-200/30 overflow-hidden transition-all duration-300";
     const hoverStyles = hover ? "hover:shadow-2xl hover:-translate-y-1" : "";
     const animateStyles = animate ? "animate-fade-in" : "";
 
     return (
-        <div 
+        <div
             className={`${baseStyles} ${hoverStyles} ${animateStyles} ${paddings[padding]} ${className}`}
             {...props}
         >

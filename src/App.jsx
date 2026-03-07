@@ -27,7 +27,7 @@ function App() {
   return (
     <Router>
       <ScrollToTopReset />
-      <div className="flex flex-col min-h-screen font-inter bg-white overflow-x-hidden">
+      <div className="flex flex-col min-h-screen font-body bg-brand-cream overflow-x-hidden">
         <Navbar />
         <main className="flex-grow"> {/* Sticky navbar handles its own space */}
           <Routes>

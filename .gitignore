@@ -9,6 +9,10 @@ __pycache__/
 dist/
 build/
 
+# Environment variables
+.env
+.env.*
+
 # Virtual environment
 .venv/
 env/
@@ -20,6 +24,10 @@ Thumbs.db
 
 # VS Code
 .vscode/
+
+# Claude
+.claude/
+CLAUDE.md
 
 # Render / Docker artefacts
 Dockerfile

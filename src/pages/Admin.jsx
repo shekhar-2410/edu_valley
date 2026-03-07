@@ -75,15 +75,15 @@ const Admin = () => {
     ]
 
     return (
-        <div className="bg-slate-50 min-h-screen">
+        <div className="bg-brand-cream min-h-screen">
             {/* Header Section */}
             <section className="bg-white border-b border-slate-200">
                 <div className="container mx-auto px-4 py-8 md:py-12">
                     <div className="flex flex-col md:flex-row justify-between items-center gap-8">
                         <div>
                             <div className="flex items-center gap-3 mb-1">
-                                <span className="w-10 h-1 text-blue-600 bg-blue-600 rounded-full"></span>
-                                <span className="text-xs font-black text-blue-600 uppercase tracking-[0.3em]">Administrator</span>
+                                <span className="w-10 h-1 text-brand-navy-600 bg-brand-navy-600 rounded-full"></span>
+                                <span className="text-xs font-black text-brand-navy-600 uppercase tracking-[0.3em]">Administrator</span>
                             </div>
                             <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight uppercase">Dashboard</h1>
                         </div>
@@ -93,7 +93,7 @@ const Admin = () => {
                                     className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all active:scale-95 ${
                                         showAddForm 
                                         ? 'bg-slate-100 text-slate-600 hover:bg-slate-200' 
-                                        : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'
+                                        : 'bg-brand-navy-600 text-white hover:bg-brand-navy-700 shadow-brand-navy-600/20'
                                     }`}
                                     onClick={() => setShowAddForm(!showAddForm)}
                                 >
@@ -121,7 +121,7 @@ const Admin = () => {
                                 key={tab.id}
                                 className={`inline-flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-sm transition-all ${
                                     activeTab === tab.id 
-                                    ? 'bg-white text-blue-600 shadow-sm' 
+                                    ? 'bg-white text-brand-navy-600 shadow-sm' 
                                     : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
                                 }`}
                                 onClick={() => {
@@ -191,11 +191,11 @@ const ImagePicker = ({ onSelect, onClose }) => {
                     </button>
                 </div>
                 
-                <div className="p-4 bg-slate-50 border-b border-slate-100">
+                <div className="p-4 bg-brand-cream border-b border-slate-100">
                     <input
                         type="text"
                         placeholder="Search by title or category..."
-                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         autoFocus
@@ -205,7 +205,7 @@ const ImagePicker = ({ onSelect, onClose }) => {
                 <div className="flex-1 overflow-y-auto p-6">
                     {loading ? (
                         <div className="flex justify-center py-12">
-                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-brand-navy-600"></div>
                         </div>
                     ) : filteredImages.length === 0 ? (
                         <div className="text-center py-12 text-slate-400">
@@ -218,7 +218,7 @@ const ImagePicker = ({ onSelect, onClose }) => {
                                 <button
                                     key={img.id}
                                     onClick={() => onSelect(img.image_url)}
-                                    className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 border-2 border-transparent hover:border-blue-500 transition-all focus:outline-none focus:ring-4 focus:ring-blue-500/20"
+                                    className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 border-2 border-transparent hover:border-brand-navy-500 transition-all focus:outline-none focus:ring-4 focus:ring-brand-navy-500/20"
                                 >
                                     <img 
                                         src={img.image_url} 
@@ -365,7 +365,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     return (
         <div className="space-y-8 animate-fade-in">
             {showForm && (
-                <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
+                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
                             {editingId ? 'Edit Event' : 'Create New Event'}
@@ -381,7 +381,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="Enter event name..."
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                     required
@@ -392,7 +392,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <textarea
                                     placeholder="Describe the event details..."
                                     rows={4}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all resize-none"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                     required
@@ -404,7 +404,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Date</label>
                                 <input
                                     type="date"
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
                                     value={formData.date}
                                     onChange={(e) => setFormData({ ...formData, date: e.target.value })}
                                     required
@@ -415,7 +415,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="e.g., Auditorium OR Auditorium https://maps..."
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
                                     value={formData.location}
                                     onChange={(e) => setFormData({ ...formData, location: e.target.value })}
                                 />
@@ -428,7 +428,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                         <input
                                             type="text"
                                             placeholder="https://..."
-                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
                                             value={formData.image_url}
                                             onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                                         />
@@ -476,7 +476,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting || isUploading}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {isSubmitting ? 'Saving...' : editingId ? 'Update Event' : 'Save Event'}
                             </button>
@@ -497,7 +497,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
             <div className="overflow-x-auto rounded-3xl border border-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <tr className="bg-brand-cream border-b border-slate-200">
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Title</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Location</th>
@@ -506,7 +506,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {events.map((event) => (
-                            <tr key={event.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <tr key={event.id} className="hover:bg-brand-cream/50 transition-colors group">
                                 <td className="px-6 py-4 font-bold text-slate-900">{event.title}</td>
                                 <td className="px-6 py-4 text-slate-600 font-medium">
                                     {new Date(event.date).toLocaleDateString('en-GB', {
@@ -517,7 +517,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 max-w-[200px] truncate">
                                     {event.location?.startsWith('http') ? (
-                                        <a href={event.location} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                                        <a href={event.location} target="_blank" rel="noopener noreferrer" className="text-brand-navy-600 hover:underline">
                                             View Map
                                         </a>
                                     ) : (
@@ -527,7 +527,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <td className="px-6 py-4">
                                     <div className="flex items-center justify-end gap-2">
                                         <button 
-                                            className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                                            className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white transition-all shadow-sm"
                                             onClick={() => handleEdit(event)}
                                             title="Edit Event"
                                         >
@@ -635,7 +635,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const getPriorityColor = (priority) => {
         switch(priority) {
             case 'high': return 'bg-rose-100 text-rose-700 border-rose-200'
-            case 'normal': return 'bg-blue-100 text-blue-700 border-blue-200'
+            case 'normal': return 'bg-brand-navy-100 text-brand-navy-700 border-brand-navy-200'
             case 'low': return 'bg-slate-100 text-slate-700 border-slate-200'
             default: return 'bg-slate-100 text-slate-700'
         }
@@ -644,7 +644,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     return (
         <div className="space-y-8 animate-fade-in">
             {showForm && (
-                <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
+                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
                             {editingId ? 'Edit Announcement' : 'Post New Announcement'}
@@ -659,7 +659,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <input
                                 type="text"
                                 placeholder="Give this announcement a catchy title..."
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all font-bold"
+                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all font-bold"
                                 value={formData.title}
                                 onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                 required
@@ -670,7 +670,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <textarea
                                 placeholder="Type the announcement details here..."
                                 rows={4}
-                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all resize-none"
+                                className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all resize-none"
                                 value={formData.content}
                                 onChange={(e) => setFormData({ ...formData, content: e.target.value })}
                                 required
@@ -686,7 +686,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                         onClick={() => setFormData({...formData, priority: p})}
                                         className={`px-6 py-2 rounded-lg border-2 font-black uppercase text-xs tracking-widest transition-all ${
                                             formData.priority === p 
-                                            ? 'bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20' 
+                                            ? 'bg-brand-navy-600 border-brand-navy-600 text-white shadow-lg shadow-brand-navy-600/20' 
                                             : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
                                         }`}
                                     >
@@ -700,7 +700,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95"
                             >
                                 {isSubmitting ? 'Posting...' : editingId ? 'Update' : 'Post Now'}
                             </button>
@@ -712,7 +712,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
             <div className="overflow-x-auto rounded-3xl border border-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <tr className="bg-brand-cream border-b border-slate-200">
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Title</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Priority</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
@@ -721,7 +721,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {announcements.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
                                 <td className="px-6 py-4 font-bold text-slate-900">{item.title}</td>
                                 <td className="px-6 py-4">
                                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getPriorityColor(item.priority)}`}>
@@ -731,7 +731,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <td className="px-6 py-4 text-slate-500 text-sm">{new Date(item.created_at).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white" onClick={() => handleEdit(item)}>
+                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
@@ -873,7 +873,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     return (
         <div className="space-y-8 animate-fade-in">
             {showForm && (
-                <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
+                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
                             {editingId ? 'Edit Faculty Member' : 'Add New Faculty Member'}
@@ -889,7 +889,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="e.g., Dr. John Doe"
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                                     required
@@ -900,7 +900,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="e.g., Senior Principal"
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                     value={formData.position}
                                     onChange={(e) => setFormData({ ...formData, position: e.target.value })}
                                     required
@@ -911,7 +911,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="e.g., Mathematics"
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                     value={formData.department}
                                     onChange={(e) => setFormData({ ...formData, department: e.target.value })}
                                 />
@@ -924,7 +924,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <input
                                         type="email"
                                         placeholder="email@nev.edu"
-                                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                                     />
@@ -934,7 +934,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <input
                                         type="tel"
                                         placeholder="+91..."
-                                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                        className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                                     />
@@ -945,7 +945,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <textarea
                                     placeholder="Tell us about this member..."
                                     rows={2}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all resize-none"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all resize-none"
                                     value={formData.bio}
                                     onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
                                 />
@@ -957,7 +957,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                         <input
                                             type="text"
                                             placeholder="https://..."
-                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                             value={formData.image_url}
                                             onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                                         />
@@ -999,7 +999,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting || isUploading}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {isSubmitting ? 'Processing...' : editingId ? 'Update Member' : 'Add Member'}
                             </button>
@@ -1020,7 +1020,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
             <div className="overflow-x-auto rounded-3xl border border-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <tr className="bg-brand-cream border-b border-slate-200">
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Name</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Role</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Department</th>
@@ -1029,7 +1029,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {faculty.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
                                 <td className="px-6 py-4">
                                     <div className="flex items-center gap-3">
                                         <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
@@ -1042,7 +1042,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <td className="px-6 py-4 text-slate-500">{item.department}</td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white" onClick={() => handleEdit(item)}>
+                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
@@ -1180,7 +1180,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     return (
         <div className="space-y-8 animate-fade-in">
             {showForm && (
-                <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
+                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
                     <div className="flex items-center justify-between mb-6">
                         <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
                             {editingId ? 'Edit Image Info' : 'Add New Gallery Image'}
@@ -1196,7 +1196,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <input
                                     type="text"
                                     placeholder="Enter title..."
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all font-bold"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all font-bold"
                                     value={formData.title}
                                     onChange={(e) => setFormData({ ...formData, title: e.target.value })}
                                     required
@@ -1209,7 +1209,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                         <input
                                             type="text"
                                             placeholder="Type new category..."
-                                            className="min-w-0 flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all"
+                                            className="min-w-0 flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                             value={formData.category}
                                             onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                             autoFocus
@@ -1230,7 +1230,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <div className="flex gap-2">
                                         <div className="relative flex-1">
                                             <select
-                                                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-4 pr-10 outline-none focus:border-blue-500 transition-all appearance-none"
+                                                className="w-full bg-white border border-slate-200 rounded-xl py-3 pl-4 pr-10 outline-none focus:border-brand-navy-500 transition-all appearance-none"
                                                 value={formData.category}
                                                 onChange={(e) => {
                                                     if (e.target.value === '___NEW_CATEGORY___') {
@@ -1247,7 +1247,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                                 ])).sort().map(cat => (
                                                     <option key={cat} value={cat}>{cat}</option>
                                                 ))}
-                                                <option value="___NEW_CATEGORY___" className="font-bold text-blue-600 bg-blue-50">+ Add New Category...</option>
+                                                <option value="___NEW_CATEGORY___" className="font-bold text-brand-navy-600 bg-brand-navy-50">+ Add New Category...</option>
                                             </select>
                                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" size={16} />
                                         </div>
@@ -1293,7 +1293,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                         <input
                                             type="text"
                                             placeholder="Enter image URL or upload..."
-                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all font-mono text-sm"
+                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all font-mono text-sm"
                                             value={formData.image_url}
                                             onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                                             required
@@ -1328,7 +1328,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <textarea
                                     placeholder="Brief details about the photo..."
                                     rows={1}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-blue-500 transition-all resize-none"
+                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all resize-none"
                                     value={formData.description}
                                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                                 />
@@ -1339,7 +1339,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             <button 
                                 type="submit" 
                                 disabled={isSubmitting || isUploading}
-                                className="bg-blue-600 hover:bg-blue-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-blue-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {isSubmitting ? 'Saving...' : editingId ? 'Update Info' : 'Add to Gallery'}
                             </button>
@@ -1351,7 +1351,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
             <div className="overflow-x-auto rounded-3xl border border-slate-200">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-50 border-b border-slate-200">
+                        <tr className="bg-brand-cream border-b border-slate-200">
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Preview</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Details</th>
                             <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
@@ -1360,7 +1360,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                         {images.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
                                 <td className="px-6 py-4">
                                     <div className="w-20 h-14 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
                                         <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
@@ -1368,12 +1368,12 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 </td>
                                 <td className="px-6 py-4">
                                     <h4 className="font-bold text-slate-900">{item.title}</h4>
-                                    <span className="text-xs font-black text-blue-500 uppercase tracking-widest">{item.category}</span>
+                                    <span className="text-xs font-black text-brand-navy-500 uppercase tracking-widest">{item.category}</span>
                                 </td>
                                 <td className="px-6 py-4 text-slate-500 text-sm">{new Date(item.created_at).toLocaleDateString()}</td>
                                 <td className="px-6 py-4 text-right">
                                     <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-600 hover:text-white" onClick={() => handleEdit(item)}>
+                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
@@ -1436,7 +1436,7 @@ const ContactsManager = ({ getAuthHeaders }) => {
         <div className="overflow-x-auto rounded-3xl border border-slate-200 animate-fade-in">
             <table className="w-full text-left border-collapse">
                 <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200">
+                    <tr className="bg-brand-cream border-b border-slate-200">
                         <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Sender</th>
                         <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Subject</th>
                         <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
@@ -1450,7 +1450,7 @@ const ContactsManager = ({ getAuthHeaders }) => {
                         </tr>
                     ) : (
                         contacts.map((item) => (
-                            <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
                                 <td className="px-6 py-4">
                                     <div className="font-bold text-slate-900">{item.name}</div>
                                     <div className="text-xs text-slate-500">{item.email}</div>

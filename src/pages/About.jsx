@@ -7,17 +7,17 @@ const About = () => {
     return (
         <div className="bg-white">
             {/* Header Section */}
-            <section className="relative pt-12 pb-12 lg:pt-20 lg:pb-20 overflow-hidden bg-slate-950 text-white">
+            <section className="relative pt-12 pb-12 lg:pt-20 lg:pb-20 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute inset-0 bg-cover bg-center opacity-10" style={{ backgroundImage: "url('/images/about-hero.jpg')" }}></div>
-                <div className="absolute top-0 right-0 w-full lg:w-1/2 h-full bg-blue-600/10 skew-x-[-15deg] translate-x-32 hidden lg:block"></div>
-                
+                <div className="absolute top-0 right-0 w-full lg:w-1/2 h-full bg-brand-crimson-600/5 skew-x-[-15deg] translate-x-32 hidden lg:block"></div>
+
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="max-w-4xl">
-                        <span className="inline-block px-4 py-2 rounded-full bg-blue-500/20 border border-blue-400/30 text-blue-300 text-sm font-bold tracking-widest uppercase backdrop-blur-sm mb-6 animate-fade-in">{t('about.header_label')}</span>
+                        <span className="inline-block px-4 py-2 rounded-full bg-brand-gold-500/20 border border-brand-gold-400/30 text-brand-gold-300 text-sm font-bold tracking-widest uppercase backdrop-blur-sm mb-6 animate-fade-in">{t('about.header_label')}</span>
                         <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-6 leading-[1.1] tracking-tight text-white">
                             {t('about.header_title')}
                         </h1>
-                        <p className="text-base md:text-lg text-slate-300 font-medium leading-relaxed max-w-2xl">
+                        <p className="text-base md:text-lg text-brand-navy-200 font-medium leading-relaxed max-w-2xl">
                             {t('about.header_subtitle')}
                         </p>
                     </div>
@@ -29,22 +29,23 @@ const About = () => {
                 <div className="container mx-auto px-4">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 md:gap-12 items-center">
                         <div className="space-y-8">
-                            <span className="text-blue-600 font-bold tracking-wider uppercase text-sm">{t('about.history_label')}</span>
-                            <h2 className="text-4xl lg:text-5xl font-extrabold text-slate-900 leading-tight">{t('about.history_title')}</h2>
-                            <div className="space-y-6 text-lg text-slate-600 leading-relaxed">
+                            <span className="text-brand-crimson-600 font-bold tracking-wider uppercase text-sm">{t('about.history_label')}</span>
+                            <h2 className="text-4xl lg:text-5xl font-extrabold text-brand-navy-900 leading-tight">{t('about.history_title')}</h2>
+                            <div className="space-y-6 text-lg text-brand-navy-500 leading-relaxed">
                                 <p>{t('about.history_p1')}</p>
                                 <p>{t('about.history_p2')}</p>
                             </div>
                         </div>
                         <div className="relative">
-                            <img 
-                                src="/images/campus-overview.jpg" 
-                                alt="Students in classroom" 
+                            <img
+                                src="/images/campus-overview.jpg"
+                                alt="Students in classroom"
+                                loading="lazy"
                                 className="w-full h-auto rounded-[2.5rem] shadow-2xl relative z-10"
                             />
-                            <div className="absolute -bottom-10 -left-10 bg-white p-8 rounded-[2rem] shadow-xl z-20 hidden md:block animate-bounce border border-slate-100">
-                                <h3 className="text-5xl font-extrabold text-blue-600 mb-2">10+</h3>
-                                <span className="text-slate-500 font-bold uppercase tracking-wider text-sm">{t('about.years_success')}</span>
+                            <div className="absolute -bottom-10 -left-10 bg-white p-8 rounded-[2rem] shadow-xl z-20 hidden md:block border border-brand-navy-100/50">
+                                <h3 className="text-5xl font-extrabold text-brand-crimson-600 mb-2">10+</h3>
+                                <span className="text-brand-navy-400 font-bold uppercase tracking-wider text-sm">{t('about.years_success')}</span>
                             </div>
                         </div>
                     </div>
@@ -52,22 +53,22 @@ const About = () => {
             </section>
 
             {/* Mission & Vision */}
-            <section className="py-12 md:py-20 bg-slate-50">
+            <section className="py-12 md:py-20 bg-brand-cream-dark">
                 <div className="container mx-auto px-4">
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-10">
-                        <div className="bg-white p-10 lg:p-14 rounded-[2.5rem] shadow-lg border border-slate-100 hover:-translate-y-2 transition-transform duration-300">
-                            <div className="w-16 h-16 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-600 mb-8">
+                        <div className="bg-white p-10 lg:p-14 rounded-[2.5rem] shadow-lg border border-brand-navy-100/50 hover:-translate-y-2 transition-transform duration-300">
+                            <div className="w-16 h-16 bg-brand-navy-50 rounded-2xl flex items-center justify-center text-brand-navy-600 mb-8">
                                 <Target size={32} />
                             </div>
-                            <h3 className="text-3xl font-bold text-slate-800 mb-6">{t('about.mission_title')}</h3>
-                            <p className="text-slate-600 leading-relaxed text-lg">{t('about.mission_desc')}</p>
+                            <h3 className="text-3xl font-bold text-brand-navy-800 mb-6">{t('about.mission_title')}</h3>
+                            <p className="text-brand-navy-500 leading-relaxed text-lg">{t('about.mission_desc')}</p>
                         </div>
-                        <div className="bg-white p-10 lg:p-14 rounded-[2.5rem] shadow-lg border border-slate-100 hover:-translate-y-2 transition-transform duration-300">
-                            <div className="w-16 h-16 bg-purple-50 rounded-2xl flex items-center justify-center text-purple-600 mb-8">
+                        <div className="bg-white p-10 lg:p-14 rounded-[2.5rem] shadow-lg border border-brand-navy-100/50 hover:-translate-y-2 transition-transform duration-300">
+                            <div className="w-16 h-16 bg-brand-gold-50 rounded-2xl flex items-center justify-center text-brand-gold-600 mb-8">
                                 <Eye size={32} />
                             </div>
-                            <h3 className="text-3xl font-bold text-slate-800 mb-6">{t('about.vision_title')}</h3>
-                            <p className="text-slate-600 leading-relaxed text-lg">{t('about.vision_desc')}</p>
+                            <h3 className="text-3xl font-bold text-brand-navy-800 mb-6">{t('about.vision_title')}</h3>
+                            <p className="text-brand-navy-500 leading-relaxed text-lg">{t('about.vision_desc')}</p>
                         </div>
                     </div>
                 </div>
@@ -77,23 +78,23 @@ const About = () => {
             <section className="py-12 md:py-24 bg-white">
                 <div className="container mx-auto px-4">
                     <div className="text-center max-w-3xl mx-auto mb-10 md:mb-20">
-                        <span className="text-blue-600 font-bold tracking-wider uppercase text-sm mb-4 block">{t('about.values_label')}</span>
-                        <h2 className="text-4xl lg:text-5xl font-extrabold text-slate-900 mb-6">{t('about.values_title')}</h2>
-                        <p className="text-xl text-slate-600">{t('about.values_subtitle')}</p>
+                        <span className="text-brand-crimson-600 font-bold tracking-wider uppercase text-sm mb-4 block">{t('about.values_label')}</span>
+                        <h2 className="text-4xl lg:text-5xl font-extrabold text-brand-navy-900 mb-6">{t('about.values_title')}</h2>
+                        <p className="text-xl text-brand-navy-400">{t('about.values_subtitle')}</p>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                         {[
                             { icon: CheckCircle, title: t('about.excellence'), desc: t('about.excellence_desc'), color: "text-emerald-500", bg: "bg-emerald-50" },
-                            { icon: Heart, title: t('about.compassion'), desc: t('about.compassion_desc'), color: "text-rose-500", bg: "bg-rose-50" },
-                            { icon: Star, title: t('about.innovation'), desc: t('about.innovation_desc'), color: "text-amber-500", bg: "bg-amber-50" },
-                            { icon: Shield, title: t('about.integrity'), desc: t('about.integrity_desc'), color: "text-blue-500", bg: "bg-blue-50" },
+                            { icon: Heart, title: t('about.compassion'), desc: t('about.compassion_desc'), color: "text-brand-crimson-500", bg: "bg-brand-crimson-50" },
+                            { icon: Star, title: t('about.innovation'), desc: t('about.innovation_desc'), color: "text-brand-gold-500", bg: "bg-brand-gold-50" },
+                            { icon: Shield, title: t('about.integrity'), desc: t('about.integrity_desc'), color: "text-brand-navy-500", bg: "bg-brand-navy-50" },
                         ].map((item, i) => (
-                            <div key={i} className="text-center p-8 rounded-[2rem] hover:bg-slate-50 transition-colors duration-300 group">
+                            <div key={i} className="text-center p-8 rounded-[2rem] hover:bg-brand-cream transition-colors duration-300 group">
                                 <div className={`w-20 h-20 mx-auto rounded-full ${item.bg} ${item.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300`}>
                                     <item.icon size={32} />
                                 </div>
-                                <h4 className="text-2xl font-bold text-slate-800 mb-4">{item.title}</h4>
-                                <p className="text-slate-600 leading-relaxed">{item.desc}</p>
+                                <h4 className="text-2xl font-bold text-brand-navy-800 mb-4">{item.title}</h4>
+                                <p className="text-brand-navy-500 leading-relaxed">{item.desc}</p>
                             </div>
                         ))}
                     </div>
@@ -101,16 +102,15 @@ const About = () => {
             </section>
 
             {/* Achievements */}
-            <section className="py-12 md:py-24 bg-blue-900 text-white overflow-hidden relative">
-                {/* Decorative Elements */}
-                <div className="absolute top-0 right-0 w-1/2 h-full bg-blue-800/30 skew-x-12"></div>
-                
+            <section className="py-12 md:py-24 bg-brand-navy-800 text-white overflow-hidden relative">
+                <div className="absolute top-0 right-0 w-1/2 h-full bg-brand-navy-700/30 skew-x-12"></div>
+
                 <div className="container mx-auto px-4 relative z-10">
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-20 items-center">
                         <div>
-                            <span className="text-blue-300 font-bold tracking-wider uppercase text-sm mb-4 block">{t('about.success_label')}</span>
+                            <span className="text-brand-gold-400 font-bold tracking-wider uppercase text-sm mb-4 block">{t('about.success_label')}</span>
                             <h2 className="text-4xl lg:text-5xl font-extrabold mb-12 leading-tight">{t('about.success_title')}</h2>
-                            
+
                             <div className="space-y-10">
                                 {[
                                     { title: t('about.achievement1_title'), desc: t('about.achievement1_desc') },
@@ -118,21 +118,21 @@ const About = () => {
                                     { title: t('about.achievement3_title'), desc: t('about.achievement3_desc') }
                                 ].map((item, i) => (
                                     <div key={i} className="flex gap-6 group">
-                                        <div className="text-5xl font-black text-white/10 group-hover:text-white/30 transition-colors">0{i+1}</div>
+                                        <div className="text-5xl font-black text-white/10 group-hover:text-brand-gold-400/40 transition-colors">0{i+1}</div>
                                         <div>
                                             <h4 className="text-2xl font-bold mb-3 text-white">{item.title}</h4>
-                                            <p className="text-blue-200 leading-relaxed text-lg">{item.desc}</p>
+                                            <p className="text-brand-navy-200 leading-relaxed text-lg">{item.desc}</p>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
                         <div className="relative">
-                            <div className="absolute inset-0 bg-blue-600 rounded-[2.5rem] rotate-6 opacity-30"></div>
-                            <img 
-                                src="/images/achievement.jpg" 
-                                alt="School event" 
-                                className="w-full h-auto rounded-[2.5rem] shadow-2xl relative z-10 rotate-0 hover:rotate-2 transition-transform duration-500" 
+                            <div className="absolute inset-0 bg-brand-crimson-600 rounded-[2.5rem] rotate-6 opacity-20"></div>
+                            <img
+                                src="/images/achievement.jpg"
+                                alt="School event"
+                                className="w-full h-auto rounded-[2.5rem] shadow-2xl relative z-10 rotate-0 hover:rotate-2 transition-transform duration-500"
                             />
                         </div>
                     </div>
@@ -140,14 +140,14 @@ const About = () => {
             </section>
 
             {/* CTA Banner */}
-            <section className="py-12 md:py-24 bg-gray-50">
+            <section className="py-12 md:py-24 bg-brand-cream">
                 <div className="container mx-auto px-4">
-                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-[3rem] p-8 md:p-12 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl">
+                    <div className="bg-gradient-to-r from-brand-navy-700 to-brand-navy-900 rounded-[3rem] p-8 md:p-12 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl">
                         <div className="absolute top-0 left-0 w-full h-full bg-[url('/images/pattern.svg')] opacity-10"></div>
                         <div className="relative z-10 max-w-3xl mx-auto">
                             <h2 className="text-3xl md:text-4xl lg:text-6xl font-extrabold mb-6 md:mb-8 leading-tight">{t('about.cta_title')}</h2>
-                            <p className="text-xl text-blue-100 mb-10 leading-relaxed">{t('about.cta_subtitle')}</p>
-                            <Link to="/admissions" className="inline-block bg-white text-blue-700 font-bold text-lg px-10 py-5 rounded-full hover:shadow-2xl hover:scale-105 transition-all duration-300">
+                            <p className="text-xl text-brand-navy-200 mb-10 leading-relaxed">{t('about.cta_subtitle')}</p>
+                            <Link to="/admissions" className="inline-block bg-brand-crimson-600 text-white font-bold text-lg px-10 py-5 rounded-full hover:bg-brand-crimson-700 hover:shadow-2xl hover:scale-105 transition-all duration-300">
                                 {t('about.cta_btn')}
                             </Link>
                         </div>
