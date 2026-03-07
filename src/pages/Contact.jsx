@@ -159,7 +159,7 @@ const Contact = () => {
                                                 onChange={handleChange}
                                                 required
                                                 className="w-full px-6 py-4 rounded-2xl bg-white border border-brand-navy-200/50 focus:outline-none focus:ring-4 focus:ring-brand-navy-500/10 focus:border-brand-navy-500 transition-all font-medium"
-                                                placeholder="John Doe"
+                                                placeholder="Your Name"
                                             />
                                         </div>
                                         <div className="space-y-2">
@@ -172,7 +172,7 @@ const Contact = () => {
                                                 onChange={handleChange}
                                                 required
                                                 className="w-full px-6 py-4 rounded-2xl bg-white border border-brand-navy-200/50 focus:outline-none focus:ring-4 focus:ring-brand-navy-500/10 focus:border-brand-navy-500 transition-all font-medium"
-                                                placeholder="john@example.com"
+                                                placeholder="Your Email"
                                             />
                                         </div>
                                     </div>
@@ -186,7 +186,7 @@ const Contact = () => {
                                                 value={formData.phone}
                                                 onChange={handleChange}
                                                 className="w-full px-6 py-4 rounded-2xl bg-white border border-brand-navy-200/50 focus:outline-none focus:ring-4 focus:ring-brand-navy-500/10 focus:border-brand-navy-500 transition-all font-medium"
-                                                placeholder="+91 12345 67890"
+                                                placeholder="Your Phone Number"
                                             />
                                         </div>
                                         <div className="space-y-2">
