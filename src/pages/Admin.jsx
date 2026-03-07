@@ -888,7 +888,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
                                 <input
                                     type="text"
-                                    placeholder="e.g., Dr. John Doe"
+                                    placeholder="Full Name"
                                     className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                     value={formData.name}
                                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
@@ -923,7 +923,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email</label>
                                     <input
                                         type="email"
-                                        placeholder="email@nev.edu"
+                                        placeholder="Email Address"
                                         className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.email}
                                         onChange={(e) => setFormData({ ...formData, email: e.target.value })}
@@ -933,7 +933,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Phone</label>
                                     <input
                                         type="tel"
-                                        placeholder="+91..."
+                                        placeholder="Phone Number"
                                         className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.phone}
                                         onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
