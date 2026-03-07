@@ -1,0 +1,10 @@
+backend/
+requirements.txt
+setup.bat
+start.bat
+*.py
+*.bat
+*.sh
+.venv/
+school.db
+Edu Valley Logo.pdf
