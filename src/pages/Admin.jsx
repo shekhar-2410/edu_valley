@@ -1,4 +1,4 @@
-import { Bell, Calendar, Edit2, Image, LogOut, MessageSquare, Plus, Trash2, User, X, Check, ChevronDown } from 'lucide-react'
+import { Bell, Calendar, Edit2, Image, LogOut, Plus, Trash2, User, X, Check, ChevronDown } from 'lucide-react'
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../config/api'
@@ -71,7 +71,6 @@ const Admin = () => {
         { id: 'announcements', label: 'Announcements', icon: <Bell size={20} /> },
         { id: 'faculty', label: 'Faculty', icon: <User size={20} /> },
         { id: 'gallery', label: 'Gallery', icon: <Image size={20} /> },
-        { id: 'contacts', label: 'Messages', icon: <MessageSquare size={20} /> },
     ]
 
     return (
@@ -88,7 +87,6 @@ const Admin = () => {
                             <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight uppercase">Dashboard</h1>
                         </div>
                         <div className="flex items-center gap-4 w-full md:w-auto">
-                            {activeTab !== 'contacts' && (
                                 <button
                                     className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all active:scale-95 ${
                                         showAddForm 
@@ -99,7 +97,6 @@ const Admin = () => {
                                 >
                                     {showAddForm ? 'Hide Form' : `Add ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1, -1)}`}
                                 </button>
-                            )}
                             <button 
                                 className="inline-flex items-center justify-center p-4 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-2xl transition-all active:scale-95" 
                                 onClick={handleLogout}
@@ -141,8 +138,7 @@ const Admin = () => {
                             {activeTab === 'events' && <EventsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
                             {activeTab === 'announcements' && <AnnouncementsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
                             {activeTab === 'faculty' && <FacultyManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'gallery' && <GalleryManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'contacts' && <ContactsManager getAuthHeaders={getAuthHeaders} />}
+                             {activeTab === 'gallery' && <GalleryManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
                         </div>
                     </div>
                 </div>
@@ -1388,88 +1384,5 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     )
 }
 
-// Contacts Manager
-const ContactsManager = ({ getAuthHeaders }) => {
-    const [contacts, setContacts] = useState([])
-    const [isLoading, setIsLoading] = useState(false)
-
-    React.useEffect(() => {
-        fetchContacts()
-    }, [])
-
-    const fetchContacts = async () => {
-        setIsLoading(true)
-        try {
-            const response = await fetch(API_ENDPOINTS.contacts)
-            const data = await response.json()
-            setContacts(data)
-        } catch (error) {
-            toast.error('Failed to load messages')
-        } finally {
-            setIsLoading(false)
-        }
-    }
-
-    const handleDelete = async (id) => {
-        try {
-            const response = await fetch(`${API_ENDPOINTS.contacts}/${id}`, { 
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            })
-            if (response.ok) {
-                toast.success('Message deleted')
-                fetchContacts()
-            } else {
-                const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-                toast.error(`Delete failed: ${error.detail || response.statusText}`)
-            }
-        } catch (error) {
-            toast.error('Connection error: ' + error.message)
-        }
-    }
-
-    if (isLoading && contacts.length === 0) {
-        return <div className="py-20 text-center text-slate-400 font-black uppercase tracking-widest animate-pulse">Loading Messages...</div>
-    }
-
-    return (
-        <div className="overflow-x-auto rounded-3xl border border-slate-200 animate-fade-in">
-            <table className="w-full text-left border-collapse">
-                <thead>
-                    <tr className="bg-brand-cream border-b border-slate-200">
-                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Sender</th>
-                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Subject</th>
-                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
-                        <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                    </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                    {contacts.length === 0 ? (
-                        <tr>
-                            <td colSpan="4" className="px-6 py-20 text-center text-slate-400 font-medium">No messages found.</td>
-                        </tr>
-                    ) : (
-                        contacts.map((item) => (
-                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
-                                <td className="px-6 py-4">
-                                    <div className="font-bold text-slate-900">{item.name}</div>
-                                    <div className="text-xs text-slate-500">{item.email}</div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="text-slate-700 font-medium truncate max-w-xs">{item.subject}</div>
-                                    <div className="text-sm text-slate-400 truncate max-w-xs">{item.message}</div>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500 text-sm">{new Date(item.created_at).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-right">
-                                        <DeleteAction onDelete={() => handleDelete(item.id)} title="Delete Message" />
-                                </td>
-                            </tr>
-                        ))
-                    )}
-                </tbody>
-            </table>
-        </div>
-    )
-}
 
 export default Admin
