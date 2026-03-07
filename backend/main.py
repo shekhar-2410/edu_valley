@@ -11,7 +11,10 @@ import os
 
 import models
 import schemas
-from database import SessionLocal
+from database import SessionLocal, engine
+
+# Create the database tables on startup
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="School Management API")
 
@@ -70,6 +73,25 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     if not user or not user.is_admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     return user
+
+# Temporary Setup Route to seed Admin Data on Render
+@app.get("/setup-db")
+@app.get("/api/setup-db")
+def setup_db(db: Session = Depends(get_db)):
+    admin = db.query(models.AdminUser).filter(models.AdminUser.email == "admin@nev.edu").first()
+    if admin:
+        return {"message": "Admin user already exists!"}
+    
+    # Create the admin user
+    hashed_pw = pwd_context.hash("admin123")
+    new_admin = models.AdminUser(
+        email="admin@nev.edu",
+        hashed_password=hashed_pw,
+        is_admin=True
+    )
+    db.add(new_admin)
+    db.commit()
+    return {"message": "Database tables created and Admin user successfully seeded!"}
 
 # Basic Routes
 @app.get("/")
