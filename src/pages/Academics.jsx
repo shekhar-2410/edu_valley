@@ -40,6 +40,7 @@ const Academics = () => {
     const grades = [
         {
             level: t('academics.elementary_title'),
+            classes: 'Class 1–5',
             description: t('academics.elementary_desc'),
             highlights: [t('academics.elementary_h1'), t('academics.elementary_h2'), t('academics.elementary_h3')],
             color: 'bg-brand-gold-50 text-brand-gold-700',
@@ -47,6 +48,7 @@ const Academics = () => {
         },
         {
             level: t('academics.middle_title'),
+            classes: 'Class 6–8',
             description: t('academics.middle_desc'),
             highlights: [t('academics.middle_h1'), t('academics.middle_h2'), t('academics.middle_h3')],
             color: 'bg-brand-navy-50 text-brand-navy-600',
@@ -54,10 +56,11 @@ const Academics = () => {
         },
         {
             level: t('academics.high_title'),
+            classes: 'Class 9–10',
             description: t('academics.high_desc'),
             highlights: [t('academics.high_h1'), t('academics.high_h2'), t('academics.high_h3')],
-            color: 'bg-emerald-50 text-emerald-600',
-            border: 'border-emerald-100'
+            color: 'bg-brand-navy-50 text-brand-navy-600',
+            border: 'border-brand-navy-100'
         }
     ]
 
@@ -65,7 +68,7 @@ const Academics = () => {
         <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-16 pb-16 lg:pt-40 lg:pb-40 overflow-hidden bg-brand-navy-950 text-white">
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1456513080510-7bf3a84b82f8?auto=format&fit=crop&q=80&w=2000')] bg-fixed bg-cover bg-center opacity-10"></div>
+                <div className="absolute inset-0 bg-[url('/images/academics-hero.jpg')] bg-fixed bg-cover bg-center opacity-10"></div>
 
                 <div className="absolute top-20 left-10 w-64 h-64 bg-brand-crimson-600/10 rounded-full blur-[100px] animate-pulse"></div>
                 <div className="absolute bottom-10 right-10 w-80 h-80 bg-brand-gold-500/10 rounded-full blur-[120px] animate-pulse"></div>
@@ -115,8 +118,9 @@ const Academics = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                         {grades.map((grade, index) => (
                             <div key={index} className={`bg-white p-8 rounded-[2.5rem] shadow-lg border ${grade.border} hover:shadow-xl transition-all duration-300 h-full flex flex-col`}>
-                                <div className={`inline-block px-4 py-2 rounded-full ${grade.color} font-bold text-sm tracking-wide mb-6 w-max`}>
+                                <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full ${grade.color} font-bold text-sm tracking-wide mb-6 w-max`}>
                                     {grade.level}
+                                    <span className="opacity-60">({grade.classes})</span>
                                 </div>
                                 <p className="text-brand-navy-500 text-lg mb-8 flex-grow">{grade.description}</p>
                                 <ul className="space-y-4">
@@ -174,13 +178,13 @@ const Academics = () => {
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8 mb-10 md:mb-16">
                         <div className="bg-brand-navy-800 p-8 rounded-[2rem] border border-brand-navy-700 hover:border-brand-navy-500 transition-colors">
                             <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                                <span className="w-2 h-8 bg-brand-navy-500 rounded-full"></span>
+                                <span className="w-2 h-8 bg-brand-gold-500 rounded-full"></span>
                                 {t('academics.ntse_title')}
                             </h3>
                             <div className="space-y-4 text-brand-navy-300">
                                 <p><strong className="text-white">{t('academics.conducted_by')}:</strong> NCERT</p>
                                 <p><strong className="text-white">{t('academics.for_classes')}:</strong> Class 10</p>
-                                <p><strong className="text-white">{t('academics.benefits')}:</strong> {t('faculty.read_profile')}</p>
+                                <p><strong className="text-white">{t('academics.benefits')}:</strong> Monthly stipend of ₹1,250 (Class 9–10) + ₹2,000 (Class 11–12)</p>
                                 <div className="mt-6 pt-6 border-t border-brand-navy-700">
                                     <h4 className="text-white font-bold mb-3">{t('academics.resources')}:</h4>
                                     <div className="flex flex-wrap gap-4">
@@ -209,9 +213,9 @@ const Academics = () => {
                             </div>
                         </div>
 
-                        <div className="bg-brand-navy-800 p-8 rounded-[2rem] border border-brand-navy-700 hover:border-emerald-500 transition-colors">
+                        <div className="bg-brand-navy-800 p-8 rounded-[2rem] border border-brand-navy-700 hover:border-brand-gold-500 transition-colors">
                             <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                                <span className="w-2 h-8 bg-emerald-500 rounded-full"></span>
+                                <span className="w-2 h-8 bg-brand-gold-500 rounded-full"></span>
                                 {t('academics.inspire_title')}
                             </h3>
                             <div className="space-y-4 text-brand-navy-300">
@@ -221,7 +225,7 @@ const Academics = () => {
                                 <div className="mt-6 pt-6 border-t border-brand-navy-700">
                                     <h4 className="text-white font-bold mb-3">{t('academics.resources')}:</h4>
                                     <div className="flex flex-wrap gap-4">
-                                        <a href="https://online-inspire.gov.in/" target="_blank" rel="noopener noreferrer" className="text-emerald-400 hover:text-emerald-300 underline">INSPIRE Official Portal</a>
+                                        <a href="https://online-inspire.gov.in/" target="_blank" rel="noopener noreferrer" className="text-brand-gold-400 hover:text-brand-gold-300 underline">INSPIRE Official Portal</a>
                                     </div>
                                 </div>
                             </div>
@@ -229,7 +233,7 @@ const Academics = () => {
 
                         <div className="bg-brand-navy-800 p-8 rounded-[2rem] border border-brand-navy-700 hover:border-brand-crimson-500 transition-colors">
                             <h3 className="text-2xl font-bold text-white mb-6 flex items-center gap-3">
-                                <span className="w-2 h-8 bg-brand-crimson-500 rounded-full"></span>
+                                <span className="w-2 h-8 bg-brand-gold-500 rounded-full"></span>
                                 {t('academics.state_scholarships')}
                             </h3>
                             <div className="space-y-4 text-brand-navy-300">

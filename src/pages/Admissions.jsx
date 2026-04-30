@@ -31,7 +31,7 @@ const Admissions = () => {
             number: '04',
             title: t('admissions.step4_title'),
             description: t('admissions.step4_desc'),
-            color: 'bg-emerald-100 text-emerald-600'
+            color: 'bg-brand-gold-50 text-brand-gold-600'
         }
     ]
 
@@ -100,7 +100,7 @@ const Admissions = () => {
                         </div>
 
                         <div className="bg-white p-10 rounded-[2.5rem] shadow-lg border border-brand-navy-100/50 hover:shadow-xl transition-shadow duration-300">
-                            <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center mb-8">
+                            <div className="w-16 h-16 bg-brand-navy-50 text-brand-navy-600 rounded-2xl flex items-center justify-center mb-8">
                                 <ShieldCheck size={32} />
                             </div>
                             <h3 className="text-2xl font-bold text-brand-navy-800 mb-6">{t('admissions.fee_title')}</h3>
@@ -159,8 +159,8 @@ const Admissions = () => {
                             </p>
                         </div>
 
-                        <div className="bg-brand-cream p-10 rounded-[2.5rem] border border-brand-navy-100/30 hover:border-emerald-200 hover:bg-white hover:shadow-2xl transition-all duration-500 group">
-                            <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-emerald-600 group-hover:text-white transition-colors duration-300">
+                        <div className="bg-brand-cream p-10 rounded-[2.5rem] border border-brand-navy-100/30 hover:border-brand-navy-200 hover:bg-white hover:shadow-2xl transition-all duration-500 group">
+                            <div className="w-16 h-16 bg-brand-gold-50 text-brand-navy-600 rounded-2xl flex items-center justify-center mb-8 group-hover:bg-brand-navy-600 group-hover:text-white transition-colors duration-300">
                                 <Users size={32} />
                             </div>
                             <h4 className="text-2xl font-bold text-brand-navy-900 mb-4">{t('admissions.sibling_title')}</h4>
@@ -169,11 +169,11 @@ const Admissions = () => {
                             </p>
                             <ul className="space-y-2 text-brand-navy-500">
                                 <li className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-brand-gold-500"></div>
                                     <span>{t('admissions.sibling_desc1')}</span>
                                 </li>
                                 <li className="flex items-center gap-2">
-                                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500"></div>
+                                    <div className="w-1.5 h-1.5 rounded-full bg-brand-gold-500"></div>
                                     <span>{t('admissions.sibling_desc2')}</span>
                                 </li>
                             </ul>
@@ -198,7 +198,10 @@ const Admissions = () => {
                                 <h4 className="text-xl font-bold text-brand-navy-900 mb-3 group-hover:text-brand-crimson-600 transition-colors">{step.title}</h4>
                                 <p className="text-brand-navy-500 leading-relaxed font-medium">{step.description}</p>
                                 {index < steps.length - 1 && (
-                                    <div className="hidden lg:block absolute top-8 right-0 w-1/2 h-0.5 bg-brand-navy-200 -mr-4 transform translate-x-1/2"></div>
+                                    <>
+                                        <div className="lg:hidden w-0.5 h-8 bg-brand-navy-200 mx-auto mt-4"></div>
+                                        <div className="hidden lg:block absolute top-8 right-0 w-1/2 h-0.5 bg-brand-navy-200 -mr-4 transform translate-x-1/2"></div>
+                                    </>
                                 )}
                             </div>
                         ))}
@@ -219,17 +222,17 @@ const Admissions = () => {
                             <ul className="space-y-4 mb-12">
                                 {requirements.map((req, index) => (
                                     <li key={index} className="flex items-center gap-4 text-lg text-brand-navy-200 font-medium">
-                                        <CheckCircle size={20} className="text-emerald-400 flex-shrink-0" />
+                                        <CheckCircle size={20} className="text-brand-gold-400 flex-shrink-0" />
                                         {req}
                                     </li>
                                 ))}
                             </ul>
 
                             <div className="flex flex-wrap gap-4">
-                                <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 hover:bg-brand-navy-700 hover:border-brand-gold-500 transition-all text-white font-semibold">
+                                <button disabled title="Coming soon" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold opacity-50 cursor-not-allowed">
                                     <Download size={20} /> {t('admissions.prospectus')}
                                 </button>
-                                <button className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 hover:bg-brand-navy-700 hover:border-brand-gold-500 transition-all text-white font-semibold">
+                                <button disabled title="Coming soon" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold opacity-50 cursor-not-allowed">
                                     <FileText size={20} /> {t('admissions.uniform')}
                                 </button>
                             </div>
@@ -260,7 +263,7 @@ const Admissions = () => {
                             <p className="text-xl text-brand-navy-200 mb-10 max-w-2xl mx-auto">{t('admissions.cta_subtitle', { year: academicYear })}</p>
                             <div className="flex flex-col sm:flex-row justify-center gap-6">
                                 <Link to="/contact" className="inline-flex items-center justify-center bg-brand-crimson-600 text-white font-bold text-lg px-8 py-4 rounded-full hover:bg-brand-crimson-700 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                                    {t('admissions.reg_online')}
+                                    Enquire / Register →
                                 </Link>
                                 <Link to="/contact" className="inline-flex items-center justify-center bg-transparent border-2 border-white text-white font-bold text-lg px-8 py-4 rounded-full hover:bg-white/10 hover:-translate-y-1 transition-all duration-300">
                                     {t('admissions.enquire_now')}

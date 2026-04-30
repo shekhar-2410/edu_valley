@@ -93,7 +93,7 @@ const Home = () => {
 
                             <div className="flex flex-wrap justify-center lg:justify-start gap-8 lg:gap-12">
                                 <div className="flex items-center gap-3 font-bold text-brand-navy-700">
-                                    <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center shadow-sm border border-emerald-100"><CheckCircle2 size={24} /></div>
+                                    <div className="w-12 h-12 rounded-2xl bg-brand-navy-50 text-brand-navy-600 flex items-center justify-center shadow-sm border border-brand-navy-100"><CheckCircle2 size={24} /></div>
                                     <span className="text-lg">{t('home.cbse_pattern')}</span>
                                 </div>
                                 <div className="flex items-center gap-3 font-bold text-brand-navy-700">
@@ -111,10 +111,11 @@ const Home = () => {
                                 <img
                                     src="/images/home-hero.jpg"
                                     alt="Students at Narendra Edu Valley"
+                                    onError={(e) => { e.target.src = '/images/campus-overview.jpg' }}
                                     className="w-full h-auto rounded-[3rem] shadow-2xl border-8 border-white group transition-transform duration-700 hover:scale-[1.02] relative z-10"
                                 />
 
-                                <div className="absolute -top-10 -left-4 md:-left-12 bg-white/95 backdrop-blur-md p-6 rounded-[2rem] shadow-2xl shadow-brand-navy-900/10 flex items-center gap-4 hover:scale-110 transition-transform cursor-default z-20 border border-white/50">
+                                <div className="hidden md:flex absolute -top-10 -left-4 md:-left-12 bg-white/95 backdrop-blur-md p-6 rounded-[2rem] shadow-2xl shadow-brand-navy-900/10 items-center gap-4 hover:scale-110 transition-transform cursor-default z-20 border border-white/50">
                                     <div className="w-14 h-14 rounded-2xl bg-brand-navy-600 text-white flex items-center justify-center shadow-lg shadow-brand-navy-600/30"><Users size={28} /></div>
                                     <div className="flex flex-col">
                                         <strong className="text-3xl font-black text-brand-navy-900 leading-none">500+</strong>
@@ -122,7 +123,7 @@ const Home = () => {
                                     </div>
                                 </div>
 
-                                <div className="absolute -bottom-10 right-4 lg:-right-8 bg-white/95 backdrop-blur-md p-6 rounded-[2rem] shadow-2xl shadow-brand-gold-900/10 flex items-center gap-4 hover:scale-110 transition-transform cursor-default z-20 border border-white/50">
+                                <div className="hidden md:flex absolute -bottom-10 right-4 lg:-right-8 bg-white/95 backdrop-blur-md p-6 rounded-[2rem] shadow-2xl shadow-brand-gold-900/10 items-center gap-4 hover:scale-110 transition-transform cursor-default z-20 border border-white/50">
                                     <div className="w-14 h-14 rounded-2xl bg-brand-gold-400 text-white flex items-center justify-center shadow-lg shadow-brand-gold-400/30"><Star size={28} /></div>
                                     <div className="flex flex-col">
                                         <strong className="text-3xl font-black text-brand-navy-900 leading-none">4.9</strong>
@@ -164,8 +165,11 @@ const Home = () => {
                                 </>
                             ) : (
                                 <>
-                                    {['CBSE AFFILIATED', 'FIT INDIA SCHOOL', 'DREAM SIWAN', 'SMART CLASS OK', 'CCTV SECURED'].map((text, i) => (
-                                        <div key={i} className="font-black text-2xl text-brand-navy-200 mx-8">{text}</div>
+                                    {['CBSE Affiliated', 'Fit India School', 'Dream Siwan', 'Smart Class', 'CCTV Secured'].map((text, i) => (
+                                        <div key={i} className="font-black text-lg text-brand-navy-700 bg-brand-navy-50 border border-brand-navy-200 px-8 py-4 rounded-2xl flex items-center gap-3">
+                                            <span className="w-2 h-2 rounded-full bg-brand-navy-400 inline-block"></span>
+                                            {text}
+                                        </div>
                                     ))}
                                 </>
                             )}
@@ -192,14 +196,14 @@ const Home = () => {
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-10">
                         {[
-                            { title: t("home.primary_title"), img: "/images/students-group.jpg", classes: t("home.primary_classes"), icon: <BookOpen size={18}/> },
-                            { title: t("home.secondary_title"), img: "/images/campus-overview.jpg", classes: t("home.secondary_classes"), icon: <GraduationCap size={18}/> },
-                            { title: t("home.clubs_title"), img: "/images/achievement.jpg", classes: t("home.clubs_classes"), icon: <Star size={18}/> }
+                            { title: t("home.primary_title"), img: "/images/students-group.jpg", classes: t("home.primary_classes"), icon: <BookOpen size={18}/>, badge: "Foundation" },
+                            { title: t("home.secondary_title"), img: "/images/campus-overview.jpg", classes: t("home.secondary_classes"), icon: <GraduationCap size={18}/>, badge: "Board Prep" },
+                            { title: t("home.clubs_title"), img: "/images/achievement.jpg", classes: t("home.clubs_classes"), icon: <Star size={18}/>, badge: "Co-curricular" }
                         ].map((prog, i) => (
                             <div key={i} className="bg-white rounded-[2.5rem] overflow-hidden shadow-xl hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-brand-navy-100/50 group">
                                 <div className="h-72 relative overflow-hidden">
                                     <img src={prog.img} alt={prog.title} loading="lazy" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
-                                    <div className="absolute top-6 left-6 bg-white/90 backdrop-blur text-brand-navy-800 text-xs font-black px-4 py-2 rounded-xl shadow-sm tracking-wider uppercase">{t('home.best_choice')}</div>
+                                    <div className="absolute top-6 left-6 bg-white/90 backdrop-blur text-brand-navy-800 text-xs font-black px-4 py-2 rounded-xl shadow-sm tracking-wider uppercase">{prog.badge}</div>
                                 </div>
                                 <div className="p-10">
                                     <div className="flex gap-6 mb-6 text-brand-navy-400 text-sm font-bold uppercase tracking-widest">
@@ -207,8 +211,7 @@ const Home = () => {
                                         <div className="flex items-center gap-2"><Users size={16} className="text-brand-navy-500" /> <span>30 / Sec</span></div>
                                     </div>
                                     <h3 className="text-2xl font-black text-brand-navy-800 mb-8 group-hover:text-brand-crimson-600 transition-colors">{prog.title}</h3>
-                                    <div className="flex justify-between items-center pt-8 border-t border-brand-navy-50">
-                                        <div className="flex items-center gap-2 font-black text-brand-navy-800"><Star size={18} className="fill-brand-gold-400 text-brand-gold-400"/> <span>4.9</span> <span className="text-brand-navy-300 text-sm">(120)</span></div>
+                                    <div className="flex justify-end items-center pt-8 border-t border-brand-navy-50">
                                         <Link to="/admissions" className="text-brand-crimson-600 font-black text-lg hover:text-brand-crimson-800 inline-flex items-center gap-1 group/link">
                                             {t('home.apply')}
                                             <ArrowRight size={18} className="group-hover/link:translate-x-1 transition-transform" />

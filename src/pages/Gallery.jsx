@@ -1,4 +1,4 @@
-import { Image as ImageIcon, ZoomIn } from 'lucide-react'
+import { Image as ImageIcon, ZoomIn, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { API_ENDPOINTS } from '../config/api'
 
@@ -37,6 +37,7 @@ const Gallery = () => {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
     const [selectedCategory, setSelectedCategory] = useState('All')
+    const [lightbox, setLightbox] = useState(null)
 
     useEffect(() => {
         fetchGallery()
@@ -64,25 +65,25 @@ const Gallery = () => {
     if (loading) {
         return (
             <div className="bg-white">
-                <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 bg-brand-cream-dark border-b border-brand-navy-100/30">
+                <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 bg-brand-navy-950">
                     <div className="container mx-auto px-4">
                         <div className="flex flex-col lg:flex-row items-center gap-12">
                             <div className="lg:w-1/2 hidden lg:block">
                                 <div className="grid grid-cols-2 gap-6">
                                     <div className="space-y-6">
-                                        <div className="skeleton h-48 rounded-[2.5rem]"></div>
-                                        <div className="skeleton h-64 rounded-[2.5rem]"></div>
+                                        <div className="skeleton-dark h-48 rounded-[2.5rem]"></div>
+                                        <div className="skeleton-dark h-64 rounded-[2.5rem]"></div>
                                     </div>
                                     <div className="space-y-6 pt-12">
-                                        <div className="skeleton h-64 rounded-[2.5rem]"></div>
-                                        <div className="skeleton h-48 rounded-[2.5rem]"></div>
+                                        <div className="skeleton-dark h-64 rounded-[2.5rem]"></div>
+                                        <div className="skeleton-dark h-48 rounded-[2.5rem]"></div>
                                     </div>
                                 </div>
                             </div>
                             <div className="lg:w-1/2 text-center lg:text-left">
-                                <div className="skeleton h-8 w-40 mb-8 rounded-full"></div>
-                                <div className="skeleton h-14 w-3/4 mb-6"></div>
-                                <div className="skeleton h-6 w-full"></div>
+                                <div className="skeleton-dark h-8 w-40 mb-8 rounded-full"></div>
+                                <div className="skeleton-dark h-14 w-3/4 mb-6"></div>
+                                <div className="skeleton-dark h-6 w-full"></div>
                             </div>
                         </div>
                     </div>
@@ -106,7 +107,7 @@ const Gallery = () => {
     return (
         <div className="bg-white">
             {/* Header Section */}
-            <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 overflow-hidden bg-brand-cream-dark text-brand-navy-900 border-b border-brand-navy-100/30">
+            <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute top-0 left-0 w-full lg:w-1/2 h-full bg-brand-navy-900 skew-x-[15deg] -translate-x-32 hidden lg:block"></div>
 
                 <div className="container mx-auto px-4 relative z-10">
@@ -133,11 +134,11 @@ const Gallery = () => {
                         </div>
                         <div className="lg:w-1/2 text-center lg:text-left">
                             <span className="inline-block px-4 py-2 rounded-full bg-brand-gold-50 text-brand-gold-700 text-sm font-bold tracking-widest uppercase mb-6 md:mb-8">Visual Journey</span>
-                            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-6 md:mb-8 leading-[1.1] tracking-tight text-white lg:text-brand-navy-900">
+                            <h1 className="text-3xl md:text-5xl lg:text-6xl font-black mb-6 md:mb-8 leading-[1.1] tracking-tight text-white">
                                 Captured <br />
                                 <span className="text-brand-crimson-600">Moments.</span>
                             </h1>
-                            <p className="text-lg md:text-xl text-brand-navy-200 lg:text-brand-navy-400 max-w-2xl font-medium leading-relaxed">A window into life at Narendra Edu Valley. Explore our vibrant campus, events, and student achievements.</p>
+                            <p className="text-lg md:text-xl text-brand-navy-200 max-w-2xl font-medium leading-relaxed">A window into life at Narendra Edu Valley. Explore our vibrant campus, events, and student achievements.</p>
                         </div>
                     </div>
                 </div>
@@ -147,28 +148,26 @@ const Gallery = () => {
             <section className="py-12 md:py-24 bg-white min-h-screen">
                 <div className="container mx-auto px-4">
                     {/* Filters */}
-                    <div className="flex flex-wrap justify-center gap-4 mb-8 md:mb-16">
-                         <div className="inline-flex items-center p-1.5 bg-brand-navy-50 rounded-full border border-brand-navy-100">
-                            {categories.map((category) => (
-                                <button
-                                    key={category}
-                                    className={`px-6 py-3 rounded-full text-sm font-bold transition-all duration-300 ${
-                                        selectedCategory === category
-                                        ? 'bg-white text-brand-crimson-600 shadow-lg scale-105'
-                                        : 'text-brand-navy-400 hover:text-brand-navy-700 hover:bg-brand-navy-100/50'
-                                    }`}
-                                    onClick={() => setSelectedCategory(category)}
-                                >
-                                    {category}
-                                </button>
-                            ))}
-                        </div>
+                    <div className="flex flex-wrap justify-center gap-3 mb-8 md:mb-16">
+                        {categories.map((category) => (
+                            <button
+                                key={category}
+                                className={`px-6 py-3 rounded-full text-sm font-bold transition-all duration-300 border ${
+                                    selectedCategory === category
+                                    ? 'bg-brand-crimson-600 text-white border-brand-crimson-600 shadow-lg'
+                                    : 'bg-white text-brand-navy-500 border-brand-navy-200 hover:border-brand-navy-400'
+                                }`}
+                                onClick={() => setSelectedCategory(category)}
+                            >
+                                {category}
+                            </button>
+                        ))}
                     </div>
 
                     {/* Gallery Grid */}
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                         {filteredImages.map((image) => (
-                            <div key={image.id} className="group relative rounded-[2rem] overflow-hidden aspect-[4/3] bg-brand-navy-50 shadow-lg cursor-pointer">
+                            <div key={image.id} onClick={() => setLightbox(image)} className="group relative rounded-[2rem] overflow-hidden aspect-[4/3] bg-brand-navy-50 shadow-lg cursor-pointer">
                                 {image.image_url ? (
                                     <img
                                         src={image.image_url}
@@ -209,6 +208,24 @@ const Gallery = () => {
                             <button onClick={() => { setError(false); setLoading(true); fetchGallery(); }} className="px-8 py-3 bg-brand-crimson-600 text-white font-bold rounded-xl hover:bg-brand-crimson-700 transition-colors">
                                 Retry
                             </button>
+                        </div>
+                    )}
+
+                    {lightbox && (
+                        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
+                            <button onClick={() => setLightbox(null)} className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors">
+                                <X size={32} />
+                            </button>
+                            <img
+                                src={lightbox.image_url}
+                                alt={lightbox.title}
+                                className="max-h-[85vh] max-w-[90vw] object-contain rounded-2xl shadow-2xl"
+                                onClick={e => e.stopPropagation()}
+                            />
+                            <div className="absolute bottom-8 left-1/2 -translate-x-1/2 text-center text-white">
+                                <h3 className="text-xl font-bold mb-1">{lightbox.title}</h3>
+                                <span className="text-white/60 text-sm uppercase tracking-wider">{lightbox.category}</span>
+                            </div>
                         </div>
                     )}
 

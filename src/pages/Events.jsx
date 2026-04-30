@@ -1,4 +1,4 @@
-import { Calendar, MapPin } from 'lucide-react'
+import { Calendar, MapPin, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
@@ -8,6 +8,7 @@ const Events = () => {
     const [events, setEvents] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
+    const [selectedEvent, setSelectedEvent] = useState(null)
 
     useEffect(() => {
         fetchEvents()
@@ -55,7 +56,7 @@ const Events = () => {
     if (loading) {
         return (
             <div className="bg-white">
-                <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-900">
+                <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950">
                     <div className="container mx-auto px-4 text-center">
                         <div className="skeleton-dark h-8 w-40 mx-auto mb-8 rounded-full"></div>
                         <div className="skeleton-dark h-14 w-3/4 mx-auto mb-6"></div>
@@ -88,8 +89,8 @@ const Events = () => {
     return (
         <div className="bg-white">
             {/* Header Section */}
-            <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-900 text-white">
-                <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1501281668745-f7f57925c3b4?auto=format&fit=crop&q=80&w=2000')] bg-cover bg-center opacity-20"></div>
+            <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950 text-white">
+                <div className="absolute inset-0 bg-[url('/images/events-hero.jpg')] bg-cover bg-center opacity-20"></div>
                 <div className="absolute inset-0 bg-brand-navy-600/10 backdrop-blur-[2px]"></div>
 
                 <div className="container mx-auto px-4 relative z-10 text-center">
@@ -146,7 +147,9 @@ const Events = () => {
                                             <p className="text-brand-navy-500 text-sm leading-relaxed mb-6 line-clamp-3">{translateDynamic(event.description, 'events')}</p>
 
                                             <div className="mt-auto">
-                                                <button className="w-full py-3 rounded-xl bg-brand-navy-50 text-brand-navy-600 font-bold hover:bg-brand-crimson-600 hover:text-white transition-all duration-300 text-sm">
+                                                <button
+                                                    onClick={() => setSelectedEvent(event)}
+                                                    className="w-full py-3 rounded-xl bg-brand-navy-50 text-brand-navy-600 font-bold hover:bg-brand-crimson-600 hover:text-white transition-all duration-300 text-sm">
                                                     {t('events.learn_more')}
                                                 </button>
                                             </div>
@@ -164,9 +167,9 @@ const Events = () => {
                                 <div className="hidden md:block w-1/3 h-px bg-brand-navy-100"></div>
                             </div>
 
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 grayscale hover:grayscale-0 transition-all duration-500">
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {pastEvents.map((event) => (
-                                    <div key={event.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg border border-brand-navy-100/50 flex flex-col h-full hover:shadow-xl transition-shadow">
+                                    <div key={event.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg border border-brand-navy-100/50 flex flex-col h-full hover:shadow-xl transition-all duration-500 grayscale hover:grayscale-0">
                                         <div className="relative h-48 overflow-hidden">
                                             {event.image_url ? (
                                                 <img src={event.image_url} alt={event.title} className="w-full h-full object-cover" />
@@ -218,18 +221,39 @@ const Events = () => {
                 </div>
             </section>
 
+            {/* Event Detail Modal */}
+            {selectedEvent && (
+                <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setSelectedEvent(null)}>
+                    <div className="bg-white rounded-[2.5rem] max-w-2xl w-full p-10 relative" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setSelectedEvent(null)} className="absolute top-6 right-6 text-brand-navy-400 hover:text-brand-navy-900 transition-colors">
+                            <X size={24} />
+                        </button>
+                        {selectedEvent.image_url && (
+                            <img src={selectedEvent.image_url} alt={selectedEvent.title} className="w-full h-56 object-cover rounded-2xl mb-8" />
+                        )}
+                        <h2 className="text-3xl font-black text-brand-navy-900 mb-4">{translateDynamic(selectedEvent.title, 'events')}</h2>
+                        <p className="text-brand-navy-500 leading-relaxed mb-6">{translateDynamic(selectedEvent.description, 'events')}</p>
+                        <div className="flex items-center gap-6 text-brand-navy-400 text-sm font-medium">
+                            <span className="flex items-center gap-2"><Calendar size={16} /> {formatDate(selectedEvent.date)}</span>
+                            {selectedEvent.location && <span className="flex items-center gap-2"><MapPin size={16} /> {translateDynamic(selectedEvent.location, 'events')}</span>}
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* CTA Banner Section */}
             <section className="py-12 md:py-24 bg-brand-cream">
                 <div className="container mx-auto px-4">
                     <div className="bg-gradient-to-br from-brand-navy-700 to-brand-navy-900 rounded-[3rem] p-12 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl mx-auto max-w-5xl">
+                        <div className="absolute inset-0 bg-[url('/images/events-hero.jpg')] bg-cover bg-center opacity-10"></div>
                         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold-400/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
                         <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-crimson-600/10 rounded-full blur-3xl -ml-32 -mb-32"></div>
 
                         <div className="relative z-10">
                             <h2 className="text-3xl md:text-4xl lg:text-5xl font-extrabold mb-6 md:mb-8 leading-tight">{t('events.calendar_title')}</h2>
                             <p className="text-xl text-brand-navy-200 mb-8 md:mb-10 max-w-2xl mx-auto">{t('events.calendar_desc')}</p>
-                            <a href="/contact" className="inline-flex items-center justify-center bg-brand-crimson-600 text-white font-bold text-lg px-8 py-4 rounded-full hover:bg-brand-crimson-700 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
-                                {t('events.sync_cal')}
+                            <a href="/contact?subject=Event+Calendar+Updates" className="inline-flex items-center justify-center bg-brand-crimson-600 text-white font-bold text-lg px-8 py-4 rounded-full hover:bg-brand-crimson-700 hover:shadow-xl hover:-translate-y-1 transition-all duration-300">
+                                Get Event Updates
                             </a>
                         </div>
                     </div>

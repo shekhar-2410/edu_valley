@@ -8,6 +8,7 @@ const Faculty = () => {
     const [faculty, setFaculty] = useState([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
+    const [selectedDept, setSelectedDept] = useState('All')
 
     useEffect(() => {
         fetchFaculty()
@@ -94,6 +95,20 @@ const Faculty = () => {
                         <p className="text-lg text-brand-navy-400 font-medium max-w-2xl mx-auto">{t('faculty.facilitators_subtitle')}</p>
                     </div>
 
+                    {faculty.length > 0 && (
+                        <div className="flex flex-wrap justify-center gap-3 mb-10">
+                            {['All', ...[...new Set(faculty.map(f => f.department))].filter(Boolean).sort()].map(dept => (
+                                <button
+                                    key={dept}
+                                    onClick={() => setSelectedDept(dept)}
+                                    className={`px-5 py-2 rounded-full text-sm font-bold transition-all border ${selectedDept === dept ? 'bg-brand-navy-900 text-white border-brand-navy-900' : 'bg-white text-brand-navy-500 border-brand-navy-200 hover:border-brand-navy-400'}`}
+                                >
+                                    {dept}
+                                </button>
+                            ))}
+                        </div>
+                    )}
+
                     {error && (
                         <div className="text-center py-20 bg-brand-crimson-50 rounded-[3rem] border border-brand-crimson-100 mb-10">
                             <Users size={64} className="mx-auto text-brand-crimson-300 mb-6" />
@@ -106,11 +121,11 @@ const Faculty = () => {
                     )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8 md:gap-10">
-                        {faculty.map((member) => (
+                        {faculty.filter(f => selectedDept === 'All' || f.department === selectedDept).map((member) => (
                             <div key={member.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border border-brand-navy-100/50 group">
                                 <div className="h-80 overflow-hidden relative">
                                     <img
-                                        src={member.image_url || `https://i.pravatar.cc/400?u=${member.id}`}
+                                        src={member.image_url || '/images/placeholder-faculty.png'}
                                         alt={member.name}
                                         loading="lazy"
                                         className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
@@ -156,7 +171,7 @@ const Faculty = () => {
             {/* Join Team CTA */}
             <section className="py-12 md:py-24 bg-white">
                 <div className="container mx-auto px-4">
-                    <div className="bg-gradient-to-br from-brand-navy-700 to-brand-navy-900 rounded-[3rem] p-12 md:p-16 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl max-w-5xl mx-auto">
+                    <div className="bg-brand-navy-800 rounded-[3rem] p-12 md:p-16 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl max-w-5xl mx-auto border-t-4 border-brand-gold-400">
                         <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold-400/10 rounded-full blur-3xl -mr-32 -mt-32"></div>
                         <div className="absolute bottom-0 left-0 w-64 h-64 bg-brand-crimson-600/10 rounded-full blur-3xl -ml-32 -mb-32"></div>
 

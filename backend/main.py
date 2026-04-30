@@ -8,6 +8,8 @@ from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
 import hashlib
 import os
+from dotenv import load_dotenv
+load_dotenv()
 
 import models
 import schemas

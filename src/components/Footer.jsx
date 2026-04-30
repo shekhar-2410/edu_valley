@@ -47,21 +47,19 @@ const Footer = () => {
                     </div>
 
                     <div className="flex flex-col gap-6">
-                        <h3 className="text-xl font-display font-bold text-white">{t('footer.newsletter_title')}</h3>
-                        <p className="text-brand-navy-300 text-sm">{t('footer.newsletter_desc')}</p>
-                        <div className="flex gap-2">
-                            <input type="email" placeholder="Email" className="bg-white/10 border-none rounded-xl px-4 py-2 w-full outline-none focus:ring-2 focus:ring-brand-gold-400 text-white placeholder:text-brand-navy-400" />
-                            <button className="bg-brand-crimson-600 px-4 py-2 rounded-xl font-bold hover:bg-brand-crimson-700 transition-colors">{t('footer.sub_btn')}</button>
-                        </div>
+                        <h3 className="text-xl font-display font-bold text-white">Join Us</h3>
+                        <p className="text-brand-navy-300 text-sm">Admissions open for the new academic year. Enroll your child today.</p>
+                        <Link to="/admissions" className="bg-brand-crimson-600 text-white text-center py-3 px-6 rounded-xl font-bold block hover:bg-brand-crimson-700 transition-colors">
+                            Enroll Now →
+                        </Link>
+                        <a href="tel:+917050421421" className="text-brand-navy-300 hover:text-white transition-colors font-medium text-center">
+                            📞 +91 70504 21421
+                        </a>
                     </div>
                 </div>
 
                 <div className="pt-10 border-t border-white/10 flex flex-col md:flex-row justify-between items-center gap-6 text-brand-navy-400 text-sm">
                     <p>&copy; {new Date().getFullYear()} Narendra Edu Valley. {t('footer.rights_reserved')}</p>
-                    <div className="flex gap-8">
-                        <Link to="/" className="hover:text-brand-gold-400 transition-colors">Privacy Policy</Link>
-                        <Link to="/" className="hover:text-brand-gold-400 transition-colors">Terms of Service</Link>
-                    </div>
                 </div>
             </div>
         </footer>

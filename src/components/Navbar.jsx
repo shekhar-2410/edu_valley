@@ -1,5 +1,5 @@
-import { Menu, X, Languages } from 'lucide-react'
-import { useState, useEffect } from 'react'
+import { Menu, X, Languages, ChevronDown } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { createPortal } from 'react-dom'
@@ -7,29 +7,42 @@ import { createPortal } from 'react-dom'
 const Navbar = () => {
     const [isOpen, setIsOpen] = useState(false)
     const [scrolled, setScrolled] = useState(false)
+    const [moreOpen, setMoreOpen] = useState(false)
+    const moreRef = useRef(null)
     const location = useLocation()
 
     const { t, i18n } = useTranslation()
 
     useEffect(() => {
-        const handleScroll = () => {
-            setScrolled(window.scrollY > 20)
-        }
+        const handleScroll = () => setScrolled(window.scrollY > 20)
         window.addEventListener('scroll', handleScroll)
         return () => window.removeEventListener('scroll', handleScroll)
     }, [])
 
-    const navItems = [
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            if (moreRef.current && !moreRef.current.contains(e.target)) setMoreOpen(false)
+        }
+        document.addEventListener('mousedown', handleClickOutside)
+        return () => document.removeEventListener('mousedown', handleClickOutside)
+    }, [])
+
+    const primaryItems = [
         { path: '/', label: t('navbar.home') },
         { path: '/about', label: t('navbar.about') },
         { path: '/academics', label: t('navbar.academics') },
         { path: '/admissions', label: t('navbar.admissions') },
-        { path: '/faculty', label: t('navbar.faculty') },
         { path: '/events', label: t('navbar.events') },
-        { path: '/gallery', label: t('navbar.gallery') },
-        { path: '/resources', label: t('navbar.resources') },
         { path: '/contact', label: t('navbar.contact') },
     ]
+
+    const moreItems = [
+        { path: '/faculty', label: t('navbar.faculty') },
+        { path: '/gallery', label: t('navbar.gallery') },
+        { path: '/resources', label: t('navbar.resources') },
+    ]
+
+    const navItems = [...primaryItems, ...moreItems]
 
     const toggleLanguage = () => {
         const nextLang = i18n.language === 'en' ? 'hi' : 'en'
@@ -49,7 +62,7 @@ const Navbar = () => {
                 <Link
                     key={item.path}
                     to={item.path}
-                    className={`text-xl font-bold p-2 ${isActive(item.path) ? 'text-brand-crimson-600' : 'text-brand-navy-800'}`}
+                    className={`text-xl font-bold p-2 transition-all ${isActive(item.path) ? 'border-l-4 border-brand-crimson-600 pl-3 text-brand-crimson-600' : 'text-brand-navy-800'}`}
                     onClick={() => setIsOpen(false)}
                 >
                     {item.label}
@@ -86,7 +99,7 @@ const Navbar = () => {
                     {/* Desktop Menu */}
                     <div className="hidden lg:flex items-center gap-6 xl:gap-10">
                         <div className="flex items-center gap-5 xl:gap-8 border-r border-brand-navy-100/30 pr-8 xl:pr-10">
-                            {navItems.map((item) => (
+                            {primaryItems.map((item) => (
                                 <Link
                                     key={item.path}
                                     to={item.path}
@@ -98,6 +111,29 @@ const Navbar = () => {
                                     )}
                                 </Link>
                             ))}
+                            {/* More dropdown */}
+                            <div className="relative" ref={moreRef}>
+                                <button
+                                    onClick={() => setMoreOpen(v => !v)}
+                                    className={`flex items-center gap-1 text-[14px] font-semibold tracking-tight transition-all duration-300 whitespace-nowrap ${moreItems.some(i => isActive(i.path)) ? 'text-brand-crimson-600' : 'text-brand-navy-700 hover:text-brand-crimson-600'}`}
+                                >
+                                    More <ChevronDown size={14} className={`transition-transform duration-200 ${moreOpen ? 'rotate-180' : ''}`} />
+                                </button>
+                                {moreOpen && (
+                                    <div className="absolute top-full left-0 mt-3 bg-white rounded-2xl shadow-2xl border border-brand-navy-100/50 py-2 min-w-[160px] z-50">
+                                        {moreItems.map((item) => (
+                                            <Link
+                                                key={item.path}
+                                                to={item.path}
+                                                onClick={() => setMoreOpen(false)}
+                                                className={`block px-5 py-3 text-[14px] font-semibold transition-colors ${isActive(item.path) ? 'text-brand-crimson-600 bg-brand-crimson-50' : 'text-brand-navy-700 hover:text-brand-crimson-600 hover:bg-brand-navy-50'}`}
+                                            >
+                                                {item.label}
+                                            </Link>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="flex items-center gap-4 xl:gap-5 shrink-0">
                             <button

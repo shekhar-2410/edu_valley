@@ -1,4 +1,5 @@
 import { Navigate, Route, BrowserRouter as Router, Routes } from 'react-router-dom'
+import { MessageCircle } from 'lucide-react'
 import Footer from './components/Footer'
 import Navbar from './components/Navbar'
 import About from './pages/About'
@@ -12,6 +13,7 @@ import Faculty from './pages/Faculty'
 import Gallery from './pages/Gallery'
 import Home from './pages/Home'
 import Resources from './pages/Resources'
+import NotFound from './pages/NotFound'
 import ScrollToTop from './components/ui/ScrollToTop'
 import ScrollToTopReset from './components/ui/ScrollToTopReset'
 import { ToastContainer } from 'react-toastify'
@@ -41,6 +43,7 @@ function App() {
             <Route path="/resources" element={<Resources />} />
             <Route path="/contact" element={<Contact />} />
             <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="*" element={<NotFound />} />
             <Route
               path="/admin"
               element={
@@ -53,6 +56,15 @@ function App() {
         </main>
         <Footer />
         <ScrollToTop />
+        <a
+          href="https://wa.me/917050421421?text=Hello%2C%20I%20want%20to%20enquire%20about%20admissions"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="fixed bottom-24 right-6 z-50 bg-green-500 text-white p-4 rounded-full shadow-2xl hover:scale-110 hover:bg-green-600 transition-all"
+          title="Chat on WhatsApp"
+        >
+          <MessageCircle size={28} />
+        </a>
         <ToastContainer 
           position="bottom-right"
           autoClose={3000}

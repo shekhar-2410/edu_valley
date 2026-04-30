@@ -52,6 +52,25 @@ const About = () => {
                 </div>
             </section>
 
+            {/* Stats Strip */}
+            <section className="py-12 bg-brand-navy-950 text-white">
+                <div className="container mx-auto px-4">
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-8 text-center">
+                        {[
+                            { number: '500+', label: 'Students Enrolled' },
+                            { number: '20+', label: 'Expert Teachers' },
+                            { number: '10+', label: 'Years of Excellence' },
+                            { number: '98%', label: 'Pass Rate' },
+                        ].map((stat, i) => (
+                            <div key={i}>
+                                <div className="text-4xl font-black text-brand-gold-400 mb-2">{stat.number}</div>
+                                <div className="text-brand-navy-300 font-medium uppercase tracking-wider text-sm">{stat.label}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+
             {/* Mission & Vision */}
             <section className="py-12 md:py-20 bg-brand-cream-dark">
                 <div className="container mx-auto px-4">
@@ -84,7 +103,7 @@ const About = () => {
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8">
                         {[
-                            { icon: CheckCircle, title: t('about.excellence'), desc: t('about.excellence_desc'), color: "text-emerald-500", bg: "bg-emerald-50" },
+                            { icon: CheckCircle, title: t('about.excellence'), desc: t('about.excellence_desc'), color: "text-brand-gold-600", bg: "bg-brand-gold-50" },
                             { icon: Heart, title: t('about.compassion'), desc: t('about.compassion_desc'), color: "text-brand-crimson-500", bg: "bg-brand-crimson-50" },
                             { icon: Star, title: t('about.innovation'), desc: t('about.innovation_desc'), color: "text-brand-gold-500", bg: "bg-brand-gold-50" },
                             { icon: Shield, title: t('about.integrity'), desc: t('about.integrity_desc'), color: "text-brand-navy-500", bg: "bg-brand-navy-50" },
@@ -102,7 +121,7 @@ const About = () => {
             </section>
 
             {/* Achievements */}
-            <section className="py-12 md:py-24 bg-brand-navy-800 text-white overflow-hidden relative">
+            <section className="py-12 md:py-24 bg-brand-navy-950 text-white overflow-hidden relative">
                 <div className="absolute top-0 right-0 w-1/2 h-full bg-brand-navy-700/30 skew-x-12"></div>
 
                 <div className="container mx-auto px-4 relative z-10">
@@ -142,12 +161,11 @@ const About = () => {
             {/* CTA Banner */}
             <section className="py-12 md:py-24 bg-brand-cream">
                 <div className="container mx-auto px-4">
-                    <div className="bg-gradient-to-r from-brand-navy-700 to-brand-navy-900 rounded-[3rem] p-8 md:p-12 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl">
-                        <div className="absolute top-0 left-0 w-full h-full bg-[url('/images/pattern.svg')] opacity-10"></div>
+                    <div className="bg-brand-crimson-700 rounded-[3rem] p-8 md:p-12 lg:p-20 text-center text-white relative overflow-hidden shadow-2xl">
                         <div className="relative z-10 max-w-3xl mx-auto">
                             <h2 className="text-3xl md:text-4xl lg:text-6xl font-extrabold mb-6 md:mb-8 leading-tight">{t('about.cta_title')}</h2>
                             <p className="text-xl text-brand-navy-200 mb-10 leading-relaxed">{t('about.cta_subtitle')}</p>
-                            <Link to="/admissions" className="inline-block bg-brand-crimson-600 text-white font-bold text-lg px-10 py-5 rounded-full hover:bg-brand-crimson-700 hover:shadow-2xl hover:scale-105 transition-all duration-300">
+                            <Link to="/admissions" className="inline-block bg-white text-brand-crimson-700 font-bold text-lg px-10 py-5 rounded-full hover:bg-brand-cream hover:shadow-2xl hover:scale-105 transition-all duration-300">
                                 {t('about.cta_btn')}
                             </Link>
                         </div>
