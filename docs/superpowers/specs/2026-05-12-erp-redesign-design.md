@@ -286,7 +286,7 @@ Fonts: Playfair Display (headings) + DM Sans (body) — already loaded.
 
 The teacher portal is designed **mobile-first**. Every interaction must be comfortable with one thumb on a phone held in portrait. Desktop is an enhancement, not the primary target.
 
-**Mobile (<768px) — primary**
+**Mobile (<768px) — primary (iOS + Android Chrome)**
 - Fixed top bar: school logo left, hamburger right, role badge centre
 - Bottom tab bar (fixed, 56px tall) — 5 tabs with icon + label, thumb-zone placement
   - Teacher: Attendance · Students · Leaves · Marks · More
@@ -296,6 +296,11 @@ The teacher portal is designed **mobile-first**. Every interaction must be comfo
 - Forms use full-width inputs, large labels, no tiny inline elements
 - No horizontal scroll anywhere except the timetable day-strip (intentional)
 - Content area: 16px horizontal padding, no sidebar
+- Heights use `100dvh` (dynamic viewport height) with `100vh` fallback — prevents Android Chrome address-bar resize breaking fixed layouts
+- Bottom tab bar and submit buttons padded with `env(safe-area-inset-bottom)` — required for both iOS notch and Android gesture nav bar
+- `touch-action: manipulation` on all chips, buttons, and cards — eliminates 300ms tap delay and disables accidental pinch-zoom on interactive elements
+- `user-select: none` on attendance chips and card rows — prevents long-press text selection on Android
+- `overscroll-behavior: contain` on all scrollable lists — prevents pull-to-refresh triggering inside the attendance chip grid or student list
 
 **Tablet (768px–1023px)**
 - Same as mobile but bottom tabs show full labels
@@ -522,9 +527,11 @@ On desktop: centred modal, 90vw max-w-5xl, scrollable.
 
 ---
 
-## 6. Mobile UX Standards (applied throughout)
+## 6. Mobile UX Standards (iOS + Android)
 
-These rules apply to every screen in the teacher portal without exception:
+These rules apply to every screen without exception.
+
+### 6.1 Universal rules
 
 | Constraint | Rule |
 |---|---|
@@ -533,14 +540,82 @@ These rules apply to every screen in the teacher portal without exception:
 | Tables | Never used on mobile — replaced with stacked cards |
 | Horizontal scroll | Only permitted in: timetable day-strip, filter chip row |
 | Modals on mobile | Slide-up bottom sheets (not centred modals) |
-| Selects on mobile | Native `<select>` or bottom-sheet picker — no custom dropdowns that require precise tapping |
+| Selects on mobile | Native `<select>` — no custom dropdowns |
 | Forms | Full-width inputs, no side-by-side fields on mobile |
-| Numeric inputs | Always include `inputMode="numeric"` or `type="number"` |
-| Confirmation actions | Destructive actions (disable student, reject leave) require a second tap to confirm — no accidental triggers |
-| Loading states | Skeleton loaders (not spinners) for list screens — content shape is visible while loading |
-| Empty states | Friendly message + clear action button — never blank screens |
-| Offline/slow network | `loading` state shown after 300ms delay (avoids flash); error state has "Retry" button |
-| Safe area | Bottom content padded to avoid overlap with iOS home indicator / Android nav bar (use `env(safe-area-inset-bottom)`) |
+| Numeric inputs | `inputMode="numeric"` or `type="number"` always |
+| Confirmation actions | Destructive actions require a second tap — no accidental triggers |
+| Loading states | Skeleton loaders for list screens; spinner only for point actions (submit button) |
+| Empty states | Friendly message + clear action CTA — never blank |
+| Offline/slow network | Loading state shown after 300ms; error state has "Retry" |
+| Safe area | `padding-bottom: env(safe-area-inset-bottom)` on bottom tab bar and submit buttons |
+| Viewport height | Use `100dvh` with `100vh` fallback — never bare `100vh` on mobile |
+
+### 6.2 Android-specific
+
+Android Chrome has several quirks that break mobile web apps if not handled explicitly:
+
+**Virtual keyboard resize (most critical for forms)**
+- When a text input is focused on Android, the browser resizes the visual viewport. Fixed-position elements (tab bar, submit button) can jump, hide behind the keyboard, or overlap inputs.
+- Solution: use the `visualViewport` API to detect keyboard open state:
+  ```js
+  // In ERPPortal.jsx shell
+  useEffect(() => {
+    const handler = () => {
+      const keyboardOpen = window.visualViewport.height < window.innerHeight * 0.75
+      document.documentElement.style.setProperty(
+        '--keyboard-offset',
+        keyboardOpen ? `${window.innerHeight - window.visualViewport.height}px` : '0px'
+      )
+    }
+    window.visualViewport?.addEventListener('resize', handler)
+    return () => window.visualViewport?.removeEventListener('resize', handler)
+  }, [])
+  ```
+- Bottom tab bar and fixed submit buttons: `transform: translateY(calc(-1 * var(--keyboard-offset)))` — they ride up with the keyboard instead of getting buried
+- The attendance submit button must remain visible when the date/class selectors at the top are focused
+
+**Chip grid and touch events**
+- `touch-action: manipulation` on every chip — prevents double-tap zoom (Android default behaviour that makes chips feel broken)
+- `context-menu` event prevented on chips: `onContextMenu={e => e.preventDefault()}` — prevents Android long-press from opening the browser context menu mid-attendance
+- No `:hover` styles on chips — Android fires hover on first tap, causing flicker. Use `:active` only for pressed state.
+
+**Bottom sheet drag-to-dismiss**
+- Implement using `touchstart` / `touchmove` / `touchend` events (not mouse events)
+- Use `touch-action: pan-y` on the drag handle; `touch-action: none` on the rest of the sheet to prevent scroll fighting
+- Velocity-based dismiss: if user flicks down at >300px/s, dismiss even if drag distance is small
+
+**Input zoom prevention**
+- Font size of all `<input>` and `<select>` elements must be ≥ 16px — Android Chrome (and iOS Safari) zooms the page automatically on focus if font size is smaller. This disrupts the fixed layout.
+
+**`overscroll-behavior`**
+- `overscroll-behavior-y: contain` on the chip grid scroll container and student list — prevents the Android pull-to-refresh gesture from triggering while the teacher is scrolling through students
+
+**Android WebView (if wrapped in an app later)**
+- All code must work in Android WebView (Chrome 85+)
+- No use of `alert()` / `confirm()` / `prompt()` — they are blocked in WebView. All confirmations use inline UI (the confirmation modals already specified)
+
+### 6.3 PWA (Progressive Web App) — add-to-home-screen
+
+Teachers should be able to install the ERP as a home screen app on Android so it launches full-screen without the Chrome address bar.
+
+**Required additions:**
+- `public/manifest.json`: app name "NEV ERP", theme colour `#1B3A6B` (navy), background colour `#FFFBF5` (cream), `display: "standalone"`, icons at 192×192 and 512×512
+- `<link rel="manifest">` in `index.html`
+- `<meta name="theme-color" content="#1B3A6B">` in `index.html` — colours the Android status bar navy
+- Service worker: **cache-first for static assets** (JS, CSS, fonts); **network-first for API calls** — attendance submits must always go to the server, never a stale cache
+- When installed as PWA: bottom tab bar padding increases slightly (no browser chrome to contend with)
+
+**Scope:** The ERP routes (`/erp`, `/erp-login`) should be the PWA scope. The main school website is not part of the PWA.
+
+### 6.4 Browser support matrix
+
+| Browser | Min version | Notes |
+|---|---|---|
+| Android Chrome | 85+ | Primary target |
+| Samsung Internet | 14+ | Common on budget Android phones in Bihar/UP |
+| iOS Safari | 15.4+ | For students / parents |
+| Chrome Desktop | 90+ | Admin + teacher on desktop |
+| Firefox Desktop | 90+ | Secondary desktop |
 
 ---
 
