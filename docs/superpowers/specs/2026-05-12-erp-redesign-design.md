@@ -185,7 +185,7 @@ note                  TEXT nullable
 
 | Table | Change |
 |---|---|
-| `student_profiles` | Add `class_section_id FK → class_sections` (nullable, denormalised cache of current class); add `status VARCHAR(20) default "active"` (active \| transferred \| withdrawn \| expelled); add `exit_date DATE` nullable; add `exit_reason TEXT` nullable; add `date_of_birth DATE` nullable (used as default password); add `blood_group VARCHAR(5)` nullable (e.g. "A+", "B-", "O+", "AB+"); keep `class_name`/`section` strings as display cache; keep `roll_no` as nullable legacy (current roll denormalised from active enrollment — kept for backwards compat with existing display code) |
+| `student_profiles` | Add `class_section_id FK → class_sections` (nullable, denormalised cache of current class); add `status VARCHAR(20) default "active"` (active \| transferred \| withdrawn \| expelled); add `exit_date DATE` nullable; add `exit_reason TEXT` nullable; add `date_of_birth DATE` nullable (used as default password); add `blood_group VARCHAR(5)` nullable — constrained to: A+, A−, B+, B−, O+, O−, AB+, AB−; keep `class_name`/`section` strings as display cache; keep `roll_no` as nullable legacy (current roll denormalised from active enrollment — kept for backwards compat with existing display code) |
 | `erp_users` | `is_active` already exists — toggled false on soft-disable; no schema change needed |
 | `teacher_profiles` | Add `is_active BOOLEAN default true`; keep old `class_teacher_of`/`subject` strings as nullable legacy |
 | `attendance_records` | Add `class_section_id FK → class_sections` nullable; add `marked_by_teacher_id FK → teacher_profiles` nullable |
@@ -398,7 +398,7 @@ src/pages/erp/
 - Assign teacher → subject → class-section
 - Create TimetableTemplate + TimetableSlot rows
 - Create ExamSchedule rows
-- **Add new student** — form: name, email, DOB, admission no, roll no, class-section, guardian info. Default password = DOB as DDMMYYYY.
+- **Add new student** — form: name, email, DOB, admission no, roll no, class-section, guardian info, blood group (dropdown: A+, A−, B+, B−, O+, O−, AB+, AB−, "Not known"). Default password = DOB as DDMMYYYY.
 
 ### 5.4 Student portal sections
 
