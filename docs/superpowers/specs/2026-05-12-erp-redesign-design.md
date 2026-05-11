@@ -282,17 +282,30 @@ slate:  system slate scale (text, borders)
 ```
 Fonts: Playfair Display (headings) + DM Sans (body) — already loaded.
 
-### 5.2 Layout
+### 5.2 Layout — Mobile-first
+
+The teacher portal is designed **mobile-first**. Every interaction must be comfortable with one thumb on a phone held in portrait. Desktop is an enhancement, not the primary target.
+
+**Mobile (<768px) — primary**
+- Fixed top bar: school logo left, hamburger right, role badge centre
+- Bottom tab bar (fixed, 56px tall) — 5 tabs with icon + label, thumb-zone placement
+  - Teacher: Attendance · Students · Leaves · Marks · More
+  - Student: Home · Attendance · Marks · Fees · More
+- "More" tab opens a bottom sheet with remaining sections (Timetable, Analytics, Profile, Logout)
+- All tap targets minimum 48×48px
+- Forms use full-width inputs, large labels, no tiny inline elements
+- No horizontal scroll anywhere except the timetable day-strip (intentional)
+- Content area: 16px horizontal padding, no sidebar
+
+**Tablet (768px–1023px)**
+- Same as mobile but bottom tabs show full labels
+- Bottom sheet replaced by a modal drawer from the right (50% width)
 
 **Desktop (≥1024px)**
 - Fixed left sidebar 260px wide, navy background
-- School logo top + nav items + user avatar+name at bottom
+- School logo + nav items + user avatar at bottom
 - Main area: cream background, max-w-7xl, padded
-
-**Tablet/Mobile (<1024px)**
-- Hamburger button (top-left) → navy slide-out drawer
-- Bottom tab bar with 5 most-used sections (icons only)
-- Sidebar collapses completely
+- Bottom tab bar hidden on desktop
 
 ### 5.3 File structure
 ```
@@ -380,25 +393,62 @@ src/pages/erp/
 - "Download Admit Card" button → opens AdmitCardModal
 - AdmitCardModal: school header, student details, exam schedule table, print button
 
-### 5.5 Teacher portal sections
+### 5.5 Teacher portal sections — mobile-first
 
-#### Attendance (new, real-time bulk)
-- Step 1: Select class-section (dropdown) + date (date picker)
-- Step 2: Load all students in that class via API
-- Display: grid of student chips — green border = present, red = absent
-- Default: all chips set to present
-- Teacher clicks a chip to toggle absent/present
-- Submit button → POST /erp/attendance/bulk
-- If records exist for that date, pre-fill from API (GET before render)
-- Success: toast + chips lock for 3 seconds
+#### Attendance — the most critical mobile screen
+This screen is used daily, in a classroom, quickly. Every decision optimises for speed and fat-finger safety.
+
+**Layout (mobile portrait):**
+```
+┌─────────────────────────────────┐
+│ [Class 8-A ▾]    [Today ▾]  ✓  │  ← sticky top bar (56px)
+├─────────────────────────────────┤
+│ 32 students · 0 absent          │  ← live counter, updates on tap
+├─────────────────────────────────┤
+│  ● Aarav K    ● Priya S         │
+│  ● Rahul M    ● Sneha T         │  ← 2-column chip grid
+│  ✗ Amit J     ● Pooja R         │  ← absent chips: crimson bg
+│  ...                            │
+├─────────────────────────────────┤
+│    [  Submit Attendance  ]      │  ← full-width, 56px tall, navy
+└─────────────────────────────────┘
+```
+
+**Chip design:**
+- Each chip: 72px wide × 48px tall minimum
+- Green (present): navy-50 bg, navy border, student's initials avatar + first name
+- Red (absent): crimson-50 bg, crimson border, name struck-through
+- Single tap toggles; no long-press, no swipe — fat-finger safe
+- Chips are sorted by roll number ascending
+
+**Behaviour:**
+- On load: GET existing records for date+class → pre-fill. If none, all green (present)
+- Live absent counter in the sticky bar updates on every tap
+- Submit button disabled until at least one chip has been set (prevents empty submits)
+- On submit: spinner on button, chips non-interactive during request
+- On success: button turns green with checkmark for 2s, then resets
+- On error: toast, chips remain interactive for retry
+- If teacher changes class-section or date after loading, a warning prompt appears ("Unsaved changes — discard?")
+
+**Date picker:**
+- Default: today
+- Shows a bottom-sheet date picker on mobile (native `<input type="date">` styled)
+- Dates with existing attendance records shown with a dot indicator in the picker
+
+**Class-section selector:**
+- Native `<select>` on mobile (OS-native picker — fast, accessible)
+- If teacher has only one assigned class, selector is hidden entirely
 
 #### Students
-- Search bar + class-section filter dropdown (populated from teacher's assignments)
-- Table: name, admission no, class-section, fee due, attendance %, marks avg
-- Clicking a row → opens **StudentDetailDrawer** (slide-in panel, right side)
+- Vertical card list on mobile (not a table — tables are unusable on phones)
+- Each card: student name (bold), class-section + roll no, attendance % badge, marks avg badge, fee due (crimson if >0)
+- Sticky search bar at top + class-section filter chips (horizontal scroll row of pill buttons)
+- Tap a card → opens **StudentDetailModal** (full-screen slide-up sheet on mobile)
+- Inactive/disabled students shown at the bottom, greyed out with status pill
 
-#### StudentDetailModal (teacher view of a student — full screen overlay, tabbed)
-Opens when teacher clicks any student row. Full-page modal with close button.
+#### StudentDetailModal (teacher view of a student — full-screen slide-up, tabbed)
+On mobile: slides up from bottom, occupies 95% of screen height, draggable handle at top to dismiss.
+On desktop: centred modal, 90vw max-w-5xl, scrollable.
 
 **Header (always visible):** student name, class-section, roll no, admission no, guardian name + phone, profile KPIs (attendance %, avg marks %, fee due, pending leaves)
 
@@ -448,17 +498,53 @@ Opens when teacher clicks any student row. Full-page modal with close button.
   - Student appears greyed-out with status badge in teacher's Students list after disable
   - Disabled students cannot login (erp_users.is_active = false)
 
+#### Leaves (mobile-optimised)
+- Full-width cards, stacked vertically
+- Each card shows: student name, date range, days count, reason (truncated to 2 lines), status badge
+- Approve / Reject buttons: full-width on mobile, side-by-side on desktop — both 48px tall
+- Pending leaves appear first; resolved leaves collapsed under a "Show previous" toggle
+
+#### Marks (mobile-optimised)
+- Entry form uses full-width fields, stacked vertically
+- Student selector: searchable native select with roll no prefix for quick scanning
+- Subject pre-filled from teacher's assigned subject (editable)
+- Numeric inputs (marks, max marks) use `inputMode="numeric"` for numeric keyboard on mobile
+- Recorded marks: card list on mobile (not table), showing student / exam / score / grade
+
 #### Analytics
-- Class-section selector (teacher sees only their assigned classes)
-- 4 KPI tiles: total students, avg attendance %, avg marks %, fee collection %
-- Recharts BarChart: subject-wise class average marks
-- Recharts AreaChart: monthly attendance trend (last 6 months)
-- Recharts PieChart: fee status distribution (paid/partial/pending)
-- Top 5 performers table + bottom 5 performers table
+- Class-section selector at top (native select, full width on mobile)
+- 4 KPI tiles in 2×2 grid on mobile, 4×1 on desktop
+- Charts stacked vertically on mobile, full width (no side-by-side)
+- BarChart: horizontal bars on mobile (easier to read subject names) → vertical on desktop
+- AreaChart: 4-month window on mobile (6 on desktop) — prevents label overlap
+- PieChart: 260px diameter, centred, legend below on mobile
+- Top/bottom performers: 3 cards each on mobile (not 5) to keep the screen scannable
 
 ---
 
-## 6. Charts — Recharts components used
+## 6. Mobile UX Standards (applied throughout)
+
+These rules apply to every screen in the teacher portal without exception:
+
+| Constraint | Rule |
+|---|---|
+| Tap targets | Minimum 48×48px for every interactive element |
+| Typography | Body text minimum 15px; labels minimum 12px |
+| Tables | Never used on mobile — replaced with stacked cards |
+| Horizontal scroll | Only permitted in: timetable day-strip, filter chip row |
+| Modals on mobile | Slide-up bottom sheets (not centred modals) |
+| Selects on mobile | Native `<select>` or bottom-sheet picker — no custom dropdowns that require precise tapping |
+| Forms | Full-width inputs, no side-by-side fields on mobile |
+| Numeric inputs | Always include `inputMode="numeric"` or `type="number"` |
+| Confirmation actions | Destructive actions (disable student, reject leave) require a second tap to confirm — no accidental triggers |
+| Loading states | Skeleton loaders (not spinners) for list screens — content shape is visible while loading |
+| Empty states | Friendly message + clear action button — never blank screens |
+| Offline/slow network | `loading` state shown after 300ms delay (avoids flash); error state has "Retry" button |
+| Safe area | Bottom content padded to avoid overlap with iOS home indicator / Android nav bar (use `env(safe-area-inset-bottom)`) |
+
+---
+
+## 7. Charts — Recharts components used
 
 | Chart | Location | Type |
 |---|---|---|
