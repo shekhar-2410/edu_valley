@@ -119,6 +119,39 @@ max_marks        INTEGER
 created_at       DATETIME
 ```
 
+#### `student_class_enrollments`
+One record per student per academic year. Replaces the single `roll_no` on StudentProfile.
+This is the join table that gives every mark and attendance record its class context.
+```
+id               INTEGER PK
+student_id       FK → student_profiles.id
+class_section_id FK → class_sections.id
+academic_year    VARCHAR(10)   e.g. "2024-25"
+roll_no          VARCHAR(20)   roll number for THIS year in THIS class (can change year to year)
+is_current       BOOLEAN       true for the active enrollment, false for historical ones
+created_at       DATETIME
+UNIQUE (student_id, academic_year)
+```
+
+**Promotion flow using this table:**
+1. Teacher promotes student from Class 3-A (2024-25) to Class 4-A (2025-26)
+2. API sets existing enrollment's `is_current = false`
+3. API creates new enrollment: class_section_id=Class 4-A, academic_year="2025-26", roll_no=new value, is_current=true
+4. API updates `student_profiles.class_section_id` (denormalised cache for fast lookups)
+5. API inserts `student_promotion_history` record
+6. Result: student's Class 4 year starts genuinely empty — no marks, no attendance — correct behaviour
+
+**What is kept after promotion (never deleted):**
+- All previous `mark_entries` — linked via `enrollment_id` to the Class 3 enrollment
+- All previous `attendance_records` — linked via `enrollment_id` to the Class 3 enrollment
+- All `leave_requests`, `fee_invoices`, `fee_payments`, `student_remarks`
+- The old enrollment record itself (is_current=false, still queryable)
+
+**What is empty in the new year:**
+- No marks (Class 4 teacher hasn't entered any yet)
+- No attendance (hasn't started yet)
+- No new fee invoices (admin hasn't raised them yet)
+
 #### `student_remarks`
 Teacher-authored notes on a student. Separate from mark entry remarks.
 ```
@@ -152,12 +185,13 @@ note                  TEXT nullable
 
 | Table | Change |
 |---|---|
-| `student_profiles` | Add `class_section_id FK → class_sections` (nullable); add `status VARCHAR(20) default "active"` (active \| transferred \| withdrawn \| expelled); add `exit_date DATE` nullable; add `exit_reason TEXT` nullable; add `date_of_birth DATE` nullable (used as default password); keep `class_name`/`section` strings as display cache |
+| `student_profiles` | Add `class_section_id FK → class_sections` (nullable, denormalised cache of current class); add `status VARCHAR(20) default "active"` (active \| transferred \| withdrawn \| expelled); add `exit_date DATE` nullable; add `exit_reason TEXT` nullable; add `date_of_birth DATE` nullable (used as default password); add `blood_group VARCHAR(5)` nullable (e.g. "A+", "B-", "O+", "AB+"); keep `class_name`/`section` strings as display cache; keep `roll_no` as nullable legacy (current roll denormalised from active enrollment — kept for backwards compat with existing display code) |
 | `erp_users` | `is_active` already exists — toggled false on soft-disable; no schema change needed |
 | `teacher_profiles` | Add `is_active BOOLEAN default true`; keep old `class_teacher_of`/`subject` strings as nullable legacy |
 | `attendance_records` | Add `class_section_id FK → class_sections` nullable; add `marked_by_teacher_id FK → teacher_profiles` nullable |
-| `mark_entries` | Add `subject_id FK → subjects` nullable; add `academic_year VARCHAR(10)` nullable; keep `subject` string as display cache |
-| `leave_requests` | No schema change |
+| `mark_entries` | Add `enrollment_id FK → student_class_enrollments` nullable; add `subject_id FK → subjects` nullable; add `academic_year VARCHAR(10)` nullable (denormalised from enrollment for easy filtering); keep `subject` string as display cache |
+| `attendance_records` | Add `enrollment_id FK → student_class_enrollments` nullable; existing `class_section_id` and `marked_by_teacher_id` additions already planned |
+| `leave_requests` | Add `academic_year VARCHAR(10)` nullable (for year-based filtering) |
 | `fee_invoices` | No schema change |
 
 ### 3.3 Migration strategy
@@ -220,12 +254,17 @@ DELETE /erp/teacher/students/{student_profile_id}/remarks/{remark_id}
   → soft-delete (mark deleted, not purged); own remark only
 
 POST  /erp/teacher/students/{student_profile_id}/promote
-  body: { to_class_section_id, to_academic_year, exam_result, note? }
+  body: { to_class_section_id, to_academic_year, new_roll_no, exam_result, note? }
+  UI: promotion modal shows input for new_roll_no with label "Roll No in Class 4-A"
   → validates teacher is class_teacher for student's current class
+  → sets current student_class_enrollment.is_current = false
+  → creates new student_class_enrollment:
+      { student_id, class_section_id=to_class_section_id,
+        academic_year=to_academic_year, roll_no=new_roll_no, is_current=true }
+  → updates student_profiles.class_section_id + class_name/section/roll_no cache
+  → updates student_profiles.status = "active" if previously detained
   → inserts student_promotion_history record
-  → updates student_profiles.class_section_id and class_name/section cache
-  → updates student_profiles status back to "active" if previously detained
-  → 409 if student already promoted this academic year
+  → 409 if enrollment for to_academic_year already exists for this student
 
 PATCH /erp/teacher/students/{student_profile_id}/status
   body: { status, exit_date?, exit_reason? }
@@ -250,10 +289,18 @@ GET  /erp/admit-card/{exam_schedule_id}           → student's admit card data 
 
 #### Analytics
 ```
-GET  /erp/analytics/class/{class_section_id}
-  → { attendance_by_month[], marks_by_subject[], fee_summary, top_performers[], bottom_performers[] }
-GET  /erp/analytics/student/{student_profile_id}
-  → { attendance_trend[], marks_by_subject[], marks_over_time[], fee_timeline[] }
+GET  /erp/analytics/class/{class_section_id}?academic_year=2025-26
+  → { attendance_by_month[], marks_by_subject[], fee_summary,
+      top_performers[], bottom_performers[] }
+  → filters marks and attendance by enrollment.academic_year
+  → defaults to current academic year if param omitted
+
+GET  /erp/analytics/student/{student_profile_id}?academic_year=2025-26
+  → { enrollments[], attendance_trend[], marks_by_subject[],
+      marks_over_time[], fee_timeline[] }
+  → marks_over_time spans ALL academic years (for historical progress chart)
+  → marks_by_subject filters to the requested academic_year only
+  → enrollments[] lists all class years with roll_no (career history)
 ```
 
 #### Teacher dashboard update
@@ -360,14 +407,16 @@ src/pages/erp/
 - 4 KPI tiles: Fee Due (crimson), Attendance % (navy), Class Average (gold), Pending Leaves (slate)
 - Today's period strip (horizontal scroll) — period blocks color-coded by subject
 - **Historical Progress Chart** (Recharts ComposedChart):
-  - X-axis: every exam in chronological order, spanning all academic years on record
+  - X-axis: every exam in chronological order across ALL academic years on record
+    Each data point is labelled: `"Unit Test 1 · Class 3 · 2024-25"`
   - Y-axis: marks percentage (0–100%)
   - One line per subject (each subject gets a distinct colour from the brand palette)
   - An "Overall %" line in navy (bolder, slightly thicker)
-  - Vertical reference lines mark class promotions (e.g. "Promoted to Class 9-A")
-  - Tooltip on hover: exam name, date, subject scores, overall %
-  - If fewer than 2 exams on record, chart is hidden and a placeholder message shown
-  - Data comes from the existing marks endpoint — no new API needed, computed on the client
+  - Vertical reference lines mark class promotions — pulled from `enrollments[]` in the analytics response
+    Label: "Class 3 → Class 4" at the x-position of the first exam in the new year
+  - Tooltip on hover: exam name, class, year, subject scores, overall %
+  - If fewer than 2 exams on record total, chart hidden with placeholder message
+  - Data source: `GET /erp/analytics/student/{id}` → `marks_over_time[]` field (all years)
 - Teacher remarks with `visibility = student_visible` shown as a notice card below KPI tiles (gold left-border accent)
 - Latest 3 announcements
 
@@ -455,7 +504,9 @@ This screen is used daily, in a classroom, quickly. Every decision optimises for
 On mobile: slides up from bottom, occupies 95% of screen height, draggable handle at top to dismiss.
 On desktop: centred modal, 90vw max-w-5xl, scrollable.
 
-**Header (always visible):** student name, class-section, roll no, admission no, guardian name + phone, profile KPIs (attendance %, avg marks %, fee due, pending leaves)
+**Header (always visible):** student name, current class-section, current roll no (from active enrollment), admission no, blood group pill, guardian name + phone, profile KPIs (attendance %, avg marks %, fee due, pending leaves)
+
+**Class history strip (below header):** horizontal scroll of enrollment chips — e.g. "Class 3-A · Roll 5 · 2024-25" → "Class 4-A · Roll 12 · 2025-26 (Current)". Clicking a chip filters the marks and attendance tabs to that year.
 
 **Tab 1 — Overview**
 - Same 4 KPI tiles as header
@@ -645,9 +696,12 @@ Teachers should be able to install the ERP as a home screen app on Android so it
 - 1 ClassSection: class 8, section A, 2025-26
 - 3 Subjects: Mathematics, Science, English
 - TeacherSubjectAssignment: teacher → Mathematics → 8-A (is_class_teacher=true)
+- 1 StudentClassEnrollment: student → 8-A → 2025-26, roll_no="08", is_current=true
+- StudentProfile.blood_group seeded to "B+" for demo student
 - TimetableTemplate for 8-A with 6 days × 8 periods (sample slots)
 - 2 ExamSchedules: Unit Test 2 and Half-Yearly
-- AttendanceRecords updated to include class_section_id
+- AttendanceRecords updated to include class_section_id + enrollment_id
+- MarkEntries updated to include enrollment_id + academic_year="2025-26"
 
 ---
 
