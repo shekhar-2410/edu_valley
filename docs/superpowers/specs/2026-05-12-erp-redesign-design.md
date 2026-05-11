@@ -119,14 +119,44 @@ max_marks        INTEGER
 created_at       DATETIME
 ```
 
+#### `student_remarks`
+Teacher-authored notes on a student. Separate from mark entry remarks.
+```
+id           INTEGER PK
+student_id   FK → student_profiles.id
+teacher_id   FK → teacher_profiles.id
+remark       TEXT  (max 2000 chars)
+remark_type  VARCHAR(20)  academic | behavioural | general
+visibility   VARCHAR(20)  teacher_only | student_visible
+  (teacher_only = only teachers see it; student_visible = student sees it on their dashboard)
+created_at   DATETIME
+updated_at   DATETIME
+```
+
+#### `student_promotion_history`
+Tracks every class promotion, forming a complete academic journey log.
+```
+id                    INTEGER PK
+student_id            FK → student_profiles.id
+from_class_section_id FK → class_sections.id
+to_class_section_id   FK → class_sections.id
+from_academic_year    VARCHAR(10)  e.g. "2024-25"
+to_academic_year      VARCHAR(10)  e.g. "2025-26"
+exam_result           VARCHAR(20)  pass | compartment | detained
+promoted_by_teacher   FK → teacher_profiles.id
+promoted_at           DATETIME
+note                  TEXT nullable
+```
+
 ### 3.2 Modified existing tables
 
 | Table | Change |
 |---|---|
-| `student_profiles` | Add `class_section_id FK → class_sections` (nullable for migration); keep `class_name`/`section` strings as display cache |
-| `teacher_profiles` | Add `is_active BOOLEAN default true`; keep old `class_teacher_of`/`subject` strings as nullable legacy (do not drop until data migrated) |
+| `student_profiles` | Add `class_section_id FK → class_sections` (nullable); add `status VARCHAR(20) default "active"` (active \| transferred \| withdrawn \| expelled); add `exit_date DATE` nullable; add `exit_reason TEXT` nullable; add `date_of_birth DATE` nullable (used as default password); keep `class_name`/`section` strings as display cache |
+| `erp_users` | `is_active` already exists — toggled false on soft-disable; no schema change needed |
+| `teacher_profiles` | Add `is_active BOOLEAN default true`; keep old `class_teacher_of`/`subject` strings as nullable legacy |
 | `attendance_records` | Add `class_section_id FK → class_sections` nullable; add `marked_by_teacher_id FK → teacher_profiles` nullable |
-| `mark_entries` | Add `subject_id FK → subjects` nullable; keep `subject` string as display cache |
+| `mark_entries` | Add `subject_id FK → subjects` nullable; add `academic_year VARCHAR(10)` nullable; keep `subject` string as display cache |
 | `leave_requests` | No schema change |
 | `fee_invoices` | No schema change |
 
@@ -168,6 +198,48 @@ POST /erp/attendance/bulk
   → upsert AttendanceRecord for each student; idempotent
 GET  /erp/attendance/class/{class_section_id}/date/{date}
   → existing records for that day (to pre-fill the form)
+```
+
+#### Student detail, remarks, promotion, soft-disable, add new (teacher/admin)
+```
+GET   /erp/teacher/students/{student_profile_id}
+  → complete student record: profile, user info, ALL attendance, ALL marks,
+    ALL leave requests, ALL invoices, ALL payments, ALL remarks (teacher_only included),
+    promotion history
+  auth: teacher — student must be in one of their assigned class-sections
+
+POST  /erp/teacher/students/{student_profile_id}/remarks
+  body: { remark, remark_type, visibility }
+  → create a new remark; teacher_id from auth token
+
+PATCH /erp/teacher/students/{student_profile_id}/remarks/{remark_id}
+  body: { remark?, remark_type?, visibility? }
+  → edit own remark only
+
+DELETE /erp/teacher/students/{student_profile_id}/remarks/{remark_id}
+  → soft-delete (mark deleted, not purged); own remark only
+
+POST  /erp/teacher/students/{student_profile_id}/promote
+  body: { to_class_section_id, to_academic_year, exam_result, note? }
+  → validates teacher is class_teacher for student's current class
+  → inserts student_promotion_history record
+  → updates student_profiles.class_section_id and class_name/section cache
+  → updates student_profiles status back to "active" if previously detained
+  → 409 if student already promoted this academic year
+
+PATCH /erp/teacher/students/{student_profile_id}/status
+  body: { status, exit_date?, exit_reason? }
+  status ∈ active | transferred | withdrawn | expelled
+  → sets student_profiles.status + erp_users.is_active = false (if not active)
+  → does NOT delete any records
+  → 200 with updated profile; teacher sees greyed-out student in list
+
+POST  /erp/admin/students
+  body: { full_name, email, date_of_birth, admission_no, roll_no,
+          class_section_id, guardian_name, guardian_phone, address? }
+  → creates ErpUser (password = date_of_birth as DDMMYYYY, hashed)
+  → creates StudentProfile
+  → auth: admin only (uses existing admin token pattern)
 ```
 
 #### Exam schedules & admit card
@@ -250,7 +322,18 @@ src/pages/erp/
     ReceiptModal.jsx        ← reused
     AdmitCardModal.jsx      ← new printable modal
     ReportCardPrint.jsx     ← printable report card view
+    StudentDetailModal.jsx  ← full-screen tabbed modal (profile, attendance, marks, fees, leaves, remarks)
+    PromoteStudentModal.jsx ← confirmation modal for class promotion
+    DisableStudentModal.jsx ← confirmation modal for soft-disable/re-enable
 ```
+
+### 5.3b Admin panel additions (existing Admin.jsx)
+- Create/edit ClassSection
+- Create/edit Subject
+- Assign teacher → subject → class-section
+- Create TimetableTemplate + TimetableSlot rows
+- Create ExamSchedule rows
+- **Add new student** — form: name, email, DOB, admission no, roll no, class-section, guardian info. Default password = DOB as DDMMYYYY.
 
 ### 5.4 Student portal sections
 
@@ -258,6 +341,16 @@ src/pages/erp/
 - Greeting with time-of-day ("Good morning, Rahul")
 - 4 KPI tiles: Fee Due (crimson), Attendance % (navy), Class Average (gold), Pending Leaves (slate)
 - Today's period strip (horizontal scroll) — period blocks color-coded by subject
+- **Historical Progress Chart** (Recharts ComposedChart):
+  - X-axis: every exam in chronological order, spanning all academic years on record
+  - Y-axis: marks percentage (0–100%)
+  - One line per subject (each subject gets a distinct colour from the brand palette)
+  - An "Overall %" line in navy (bolder, slightly thicker)
+  - Vertical reference lines mark class promotions (e.g. "Promoted to Class 9-A")
+  - Tooltip on hover: exam name, date, subject scores, overall %
+  - If fewer than 2 exams on record, chart is hidden and a placeholder message shown
+  - Data comes from the existing marks endpoint — no new API needed, computed on the client
+- Teacher remarks with `visibility = student_visible` shown as a notice card below KPI tiles (gold left-border accent)
 - Latest 3 announcements
 
 #### Attendance
@@ -302,7 +395,58 @@ src/pages/erp/
 #### Students
 - Search bar + class-section filter dropdown (populated from teacher's assignments)
 - Table: name, admission no, class-section, fee due, attendance %, marks avg
-- Clicking a row expands inline to show last 3 marks entries
+- Clicking a row → opens **StudentDetailDrawer** (slide-in panel, right side)
+
+#### StudentDetailModal (teacher view of a student — full screen overlay, tabbed)
+Opens when teacher clicks any student row. Full-page modal with close button.
+
+**Header (always visible):** student name, class-section, roll no, admission no, guardian name + phone, profile KPIs (attendance %, avg marks %, fee due, pending leaves)
+
+**Tab 1 — Overview**
+- Same 4 KPI tiles as header
+- Marks trend LineChart (marks % over all exams chronologically)
+- Subject-wise average BarChart
+- Last 3 absences + last 3 pending/recent leaves
+
+**Tab 2 — Attendance**
+- Month/year selector
+- Full calendar grid for selected month (P/A/L/H colour coding, identical to student's own view)
+- Monthly % trend AreaChart (all available months)
+- Complete absence list with notes (all time, paginated)
+
+**Tab 3 — Marks / Report Card**
+- Exam selector (all exams on record)
+- Full marks table: subject, marks obtained, max marks, grade, remarks, teacher, date
+- Class average comparison per subject (if available)
+- Overall % + grade per exam
+
+**Tab 4 — Fees**
+- All fee invoices: title, term, amount, paid, balance, status, due date
+- All payment receipts: receipt no, date, method, amount
+- Total paid vs total due summary
+
+**Tab 5 — Leaves**
+- Complete leave request history (all time)
+- Status badges, dates, reason, reviewer note
+- Days absent count from approved leaves
+
+**Tab 6 — Remarks**
+- List of all remarks for this student (teacher sees all; student_visible flag shown as a tag)
+- "Add Remark" button → inline form: remark text (textarea), type (academic/behavioural/general), visibility toggle
+- Edit / delete own remarks inline
+- Remarks by other teachers shown read-only
+
+**Action buttons (top-right of modal header)**
+- **Promote to Next Class** — opens confirmation modal:
+  - Shows current class, asks for destination class-section dropdown + academic year + exam result (Pass / Compartment / Detained)
+  - Optional note field
+  - Confirm → PATCH call + success toast + modal refreshes with new class shown
+  - Only visible to the student's class teacher (is_class_teacher = true in TeacherSubjectAssignment)
+- **Disable / Re-enable Student** — opens confirmation modal:
+  - If active: asks for exit reason + date → sets withdrawn/transferred/expelled
+  - If inactive: re-enables (sets active)
+  - Student appears greyed-out with status badge in teacher's Students list after disable
+  - Disabled students cannot login (erp_users.is_active = false)
 
 #### Analytics
 - Class-section selector (teacher sees only their assigned classes)
