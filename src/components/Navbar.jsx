@@ -1,4 +1,4 @@
-import { Menu, X, Languages, ChevronDown } from 'lucide-react'
+import { Menu, X, Languages, ChevronDown, UserRound } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
@@ -76,6 +76,10 @@ const Navbar = () => {
                     <Languages size={24} />
                     {i18n.language === 'en' ? 'Switch to हिन्दी' : 'Switch to English'}
                 </button>
+                <Link to="/erp-login" className="flex items-center justify-center gap-3 w-full py-4 rounded-xl border-2 border-brand-navy-100 text-brand-navy-800 font-bold text-lg" onClick={() => setIsOpen(false)}>
+                    <UserRound size={24} />
+                    ERP Login
+                </Link>
                 <Link to="/admissions" className="bg-brand-crimson-600 text-white text-center py-4 rounded-xl font-bold text-lg shadow-lg shadow-brand-crimson-600/20" onClick={() => setIsOpen(false)}>
                     {t('navbar.enroll')}
                 </Link>
@@ -144,6 +148,17 @@ const Navbar = () => {
                                 <Languages size={15} />
                                 {i18n.language === 'en' ? 'हिन्दी' : 'English'}
                             </button>
+                            <Link
+                                to="/erp-login"
+                                className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border transition-all text-xs font-bold uppercase tracking-wider ${
+                                    isActive('/erp-login') || isActive('/erp')
+                                        ? 'border-brand-navy-500 bg-brand-navy-50 text-brand-navy-700'
+                                        : 'border-brand-navy-200 text-brand-navy-700 hover:text-brand-navy-600 hover:border-brand-navy-400 hover:bg-brand-navy-50'
+                                }`}
+                            >
+                                <UserRound size={15} />
+                                ERP
+                            </Link>
                             <Link to="/admissions" className="bg-brand-crimson-600 text-white px-8 xl:px-10 py-3 rounded-xl font-bold text-[14px] hover:bg-brand-crimson-700 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 transition-all whitespace-nowrap shadow-md shadow-brand-crimson-600/20">
                                 {t('navbar.enroll')}
                             </Link>

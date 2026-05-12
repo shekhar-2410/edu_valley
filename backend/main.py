@@ -2,12 +2,17 @@ from fastapi import FastAPI, Depends, HTTPException, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
+import base64
 import hashlib
+import hmac
+import json
 import os
+import urllib.error
+import urllib.request
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -63,6 +68,38 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+def invoice_balance(invoice: models.FeeInvoice) -> int:
+    return max(0, invoice.amount_paise - (invoice.paid_paise or 0))
+
+def sync_invoice_status(invoice: models.FeeInvoice):
+    if (invoice.paid_paise or 0) >= invoice.amount_paise:
+        invoice.status = "paid"
+    elif (invoice.paid_paise or 0) > 0:
+        invoice.status = "partial"
+    else:
+        invoice.status = "pending"
+
+def generate_receipt_no(payment_id: int) -> str:
+    return f"NEV-RCPT-{payment_id:05d}"
+
+def attendance_percent(records: List[models.AttendanceRecord]) -> float:
+    if not records:
+        return 0.0
+    present = len([record for record in records if record.status == "present"])
+    return round((present / len(records)) * 100, 1)
+
+def average_percent(marks: List[models.MarkEntry]) -> float:
+    if not marks:
+        return 0.0
+    percentages = [
+        (entry.marks_obtained / entry.max_marks) * 100
+        for entry in marks
+        if entry.max_marks
+    ]
+    if not percentages:
+        return 0.0
+    return round(sum(percentages) / len(percentages), 1)
+
 async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -76,24 +113,344 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     return user
 
+async def get_current_erp_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        token_type = payload.get("type")
+        if not email or token_type != "erp":
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    user = db.query(models.ErpUser).filter(models.ErpUser.email == email).first()
+    if not user or not user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return user
+
+def get_student_profile_for_user(user: models.ErpUser, db: Session) -> models.StudentProfile:
+    if user.role != "student":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student access required")
+    profile = db.query(models.StudentProfile).filter(models.StudentProfile.user_id == user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student profile not found")
+    return profile
+
+def get_teacher_profile_for_user(user: models.ErpUser, db: Session) -> models.TeacherProfile:
+    if user.role != "teacher":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
+    profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id == user.id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Teacher profile not found")
+    return profile
+
+def build_student_summary(student: models.StudentProfile, db: Session) -> schemas.StudentSummary:
+    user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
+    invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == student.id).all()
+    marks = db.query(models.MarkEntry).filter(models.MarkEntry.student_id == student.id).all()
+    attendance = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == student.id).all()
+    fee_due = sum(invoice_balance(invoice) for invoice in invoices)
+    return {
+        "user": user,
+        "profile": student,
+        "fee_due_paise": fee_due,
+        "attendance_percent": attendance_percent(attendance),
+        "latest_average_percent": average_percent(marks),
+    }
+
 # Temporary Setup Route to seed Admin Data on Render
 @app.get("/setup-db")
 @app.get("/api/setup-db")
 def setup_db(db: Session = Depends(get_db)):
+    created = []
+
     admin = db.query(models.AdminUser).filter(models.AdminUser.email == "admin@nev.edu").first()
-    if admin:
-        return {"message": "Admin user already exists!"}
-    
-    # Create the admin user
-    hashed_pw = pwd_context.hash("admin123")
-    new_admin = models.AdminUser(
-        email="admin@nev.edu",
-        hashed_password=hashed_pw,
-        is_admin=True
-    )
-    db.add(new_admin)
+    if not admin:
+        db.add(models.AdminUser(
+            email="admin@nev.edu",
+            hashed_password=pwd_context.hash("admin123"),
+            is_admin=True,
+        ))
+        created.append("admin")
+
+    teacher_user = db.query(models.ErpUser).filter(models.ErpUser.email == "teacher@nev.edu").first()
+    if not teacher_user:
+        teacher_user = models.ErpUser(
+            email="teacher@nev.edu",
+            hashed_password=pwd_context.hash("teacher123"),
+            role="teacher",
+            full_name="Anita Sharma",
+            phone="9876543210",
+        )
+        db.add(teacher_user)
+        db.flush()
+        created.append("teacher")
+
+    teacher_profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.employee_no == "NEV-T-001").first()
+    if not teacher_profile:
+        teacher_profile = models.TeacherProfile(
+            user_id=teacher_user.id,
+            employee_no="NEV-T-001",
+            department="Senior School",
+            subject="Mathematics",
+            phone="9876543210",
+            class_teacher_of="Class 8 A",
+        )
+        db.add(teacher_profile)
+        db.flush()
+
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.email == "student@nev.edu").first()
+    if not student_user:
+        student_user = models.ErpUser(
+            email="student@nev.edu",
+            hashed_password=pwd_context.hash("student123"),
+            role="student",
+            full_name="Aarav Kumar",
+            phone="9123456780",
+        )
+        db.add(student_user)
+        db.flush()
+        created.append("student")
+
+    student_profile = db.query(models.StudentProfile).filter(models.StudentProfile.admission_no == "NEV-2026-008").first()
+    if not student_profile:
+        student_profile = models.StudentProfile(
+            user_id=student_user.id,
+            admission_no="NEV-2026-008",
+            roll_no="08",
+            class_name="8",
+            section="A",
+            guardian_name="Priya Kumar",
+            guardian_phone="9988776655",
+            address="Patna, Bihar",
+        )
+        db.add(student_profile)
+        db.flush()
+
+    if not db.query(models.FeeInvoice).filter(models.FeeInvoice.invoice_no == "NEV-FEE-2026-Q1-008").first():
+        db.add(models.FeeInvoice(
+            student_id=student_profile.id,
+            invoice_no="NEV-FEE-2026-Q1-008",
+            title="Quarter 1 Tuition Fee",
+            term="Apr-Jun 2026",
+            amount_paise=1600000,
+            paid_paise=1600000,
+            due_date=date(2026, 4, 15),
+            status="paid",
+        ))
+
+    if not db.query(models.FeeInvoice).filter(models.FeeInvoice.invoice_no == "NEV-FEE-2026-Q2-008").first():
+        db.add(models.FeeInvoice(
+            student_id=student_profile.id,
+            invoice_no="NEV-FEE-2026-Q2-008",
+            title="Quarter 2 Tuition Fee",
+            term="Jul-Sep 2026",
+            amount_paise=1650000,
+            paid_paise=0,
+            due_date=date(2026, 7, 15),
+            status="pending",
+        ))
+    db.flush()
+
+    q1_invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.invoice_no == "NEV-FEE-2026-Q1-008").first()
+    if q1_invoice and not db.query(models.FeePayment).filter(models.FeePayment.receipt_no == "NEV-RCPT-00001").first():
+        db.add(models.FeePayment(
+            invoice_id=q1_invoice.id,
+            student_id=student_profile.id,
+            amount_paise=1600000,
+            method="cash",
+            status="paid",
+            receipt_no="NEV-RCPT-00001",
+            paid_at=datetime(2026, 4, 10, 10, 30, tzinfo=timezone.utc),
+        ))
+
+    if not db.query(models.LeaveRequest).filter(
+        models.LeaveRequest.student_id == student_profile.id,
+        models.LeaveRequest.from_date == date(2026, 5, 6),
+    ).first():
+        db.add(models.LeaveRequest(
+            student_id=student_profile.id,
+            teacher_id=teacher_profile.id,
+            from_date=date(2026, 5, 6),
+            to_date=date(2026, 5, 7),
+            days_count=2,
+            reason="Medical leave",
+            status="approved",
+            reviewer_note="Approved. Submit medical note to class teacher.",
+        ))
+
+    if not db.query(models.MarkEntry).filter(
+        models.MarkEntry.student_id == student_profile.id,
+        models.MarkEntry.exam_name == "Unit Test 1",
+    ).first():
+        db.add_all([
+            models.MarkEntry(
+                student_id=student_profile.id,
+                teacher_id=teacher_profile.id,
+                subject="Mathematics",
+                exam_name="Unit Test 1",
+                marks_obtained=43,
+                max_marks=50,
+                grade="A",
+                remarks="Strong problem solving",
+                exam_date=date(2026, 4, 28),
+            ),
+            models.MarkEntry(
+                student_id=student_profile.id,
+                teacher_id=teacher_profile.id,
+                subject="Science",
+                exam_name="Unit Test 1",
+                marks_obtained=40,
+                max_marks=50,
+                grade="A",
+                remarks="Good conceptual clarity",
+                exam_date=date(2026, 4, 29),
+            ),
+        ])
+
+    if not db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == student_profile.id).first():
+        db.add_all([
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 1), status="present"),
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 4), status="present"),
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 5), status="present"),
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 6), status="leave", note="Approved leave"),
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 7), status="leave", note="Approved leave"),
+            models.AttendanceRecord(student_id=student_profile.id, date=date(2026, 5, 8), status="present"),
+        ])
+
+    # ClassSection
+    class_section = db.query(models.ClassSection).filter(
+        models.ClassSection.class_name == "8",
+        models.ClassSection.section == "A",
+        models.ClassSection.academic_year == "2025-26",
+    ).first()
+    if not class_section:
+        class_section = models.ClassSection(
+            class_name="8", section="A", academic_year="2025-26", is_active=True
+        )
+        db.add(class_section)
+        db.flush()
+        created.append("class_section")
+
+    # Subjects
+    subjects_data = [
+        ("Mathematics", "MATH"),
+        ("Science", "SCI"),
+        ("English", "ENG"),
+    ]
+    subject_objs = {}
+    for name, code in subjects_data:
+        subj = db.query(models.Subject).filter(models.Subject.code == code).first()
+        if not subj:
+            subj = models.Subject(name=name, code=code)
+            db.add(subj)
+            db.flush()
+        subject_objs[code] = subj
+
+    # TeacherSubjectAssignment
+    if not db.query(models.TeacherSubjectAssignment).filter(
+        models.TeacherSubjectAssignment.teacher_id == teacher_profile.id
+    ).first():
+        db.add(models.TeacherSubjectAssignment(
+            teacher_id=teacher_profile.id,
+            subject_id=subject_objs["MATH"].id,
+            class_section_id=class_section.id,
+            academic_year="2025-26",
+            is_class_teacher=True,
+        ))
+        db.add(models.TeacherSubjectAssignment(
+            teacher_id=teacher_profile.id,
+            subject_id=subject_objs["SCI"].id,
+            class_section_id=class_section.id,
+            academic_year="2025-26",
+            is_class_teacher=False,
+        ))
+
+    # StudentClassEnrollment
+    if not db.query(models.StudentClassEnrollment).filter(
+        models.StudentClassEnrollment.student_id == student_profile.id
+    ).first():
+        enrollment = models.StudentClassEnrollment(
+            student_id=student_profile.id,
+            class_section_id=class_section.id,
+            academic_year="2025-26",
+            roll_no="08",
+            is_current=True,
+        )
+        db.add(enrollment)
+        db.flush()
+
+    # Update student profile with new fields
+    if not student_profile.class_section_id:
+        student_profile.class_section_id = class_section.id
+        student_profile.blood_group = "B+"
+        student_profile.status = "active"
+
+    # ExamSchedules
+    if not db.query(models.ExamSchedule).filter(
+        models.ExamSchedule.class_section_id == class_section.id,
+        models.ExamSchedule.exam_name == "Unit Test 2",
+    ).first():
+        db.add(models.ExamSchedule(
+            class_section_id=class_section.id,
+            subject_id=subject_objs["MATH"].id,
+            exam_name="Unit Test 2",
+            exam_date=date(2026, 6, 10),
+            start_time="09:00",
+            end_time="10:00",
+            venue="Main Hall",
+            hall_no="A",
+            academic_year="2025-26",
+            max_marks=50,
+        ))
+        db.add(models.ExamSchedule(
+            class_section_id=class_section.id,
+            subject_id=subject_objs["SCI"].id,
+            exam_name="Half-Yearly Exam",
+            exam_date=date(2026, 9, 15),
+            start_time="09:00",
+            end_time="12:00",
+            venue="Main Hall",
+            hall_no="B",
+            academic_year="2025-26",
+            max_marks=100,
+        ))
+
+    # Timetable slots for 8-A (sample week)
+    if not db.query(models.TimetableSlot).filter(
+        models.TimetableSlot.class_section_id == class_section.id
+    ).first():
+        periods = [
+            ("08:00", "08:45"), ("08:45", "09:30"), ("09:30", "10:15"),
+            ("10:15", "10:30"),  # break
+            ("10:30", "11:15"), ("11:15", "12:00"), ("12:00", "12:45"), ("12:45", "13:30"),
+        ]
+        subj_cycle = [subject_objs["MATH"].id, subject_objs["SCI"].id, subject_objs["ENG"].id,
+                      None, subject_objs["MATH"].id, subject_objs["SCI"].id, subject_objs["ENG"].id, subject_objs["MATH"].id]
+        for day in range(6):  # Mon-Sat
+            for period_idx, (start, end) in enumerate(periods):
+                is_break = (period_idx == 3)
+                db.add(models.TimetableSlot(
+                    class_section_id=class_section.id,
+                    academic_year="2025-26",
+                    day_of_week=day,
+                    period_no=period_idx + 1,
+                    start_time=start,
+                    end_time=end,
+                    subject_id=subj_cycle[period_idx] if not is_break else None,
+                    teacher_id=teacher_profile.id if not is_break and subj_cycle[period_idx] in [subject_objs["MATH"].id, subject_objs["SCI"].id] else None,
+                    is_break=is_break,
+                ))
+
     db.commit()
-    return {"message": "Database tables created and Admin user successfully seeded!"}
+    return {
+        "message": "Database tables created and sample accounts are ready.",
+        "created": created,
+        "demo_accounts": {
+            "admin": "admin@nev.edu / admin123",
+            "student": "student@nev.edu / student123",
+            "teacher": "teacher@nev.edu / teacher123",
+        },
+    }
 
 # Basic Routes
 @app.get("/")
@@ -126,10 +483,24 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
         token = create_access_token({"sub": user.email}, timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
         return {"access_token": token, "token_type": "bearer"}
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback
         error_msg = traceback.format_exc()
         raise HTTPException(status_code=500, detail=str(error_msg))
+
+@app.post("/erp/auth/login", response_model=schemas.ErpLoginResponse)
+@app.post("/api/erp/auth/login", response_model=schemas.ErpLoginResponse)
+def erp_login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(models.ErpUser).filter(models.ErpUser.email == data.email).first()
+    if not user or not user.is_active or not verify_password(data.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid ERP credentials")
+    token = create_access_token(
+        {"sub": user.email, "role": user.role, "type": "erp"},
+        timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES),
+    )
+    return {"access_token": token, "token_type": "bearer", "user": user}
 
 # News & Events
 @app.get("/events", response_model=List[schemas.Event])
@@ -265,6 +636,761 @@ def delete_announcement(announcement_id: int, db: Session = Depends(get_db), adm
     db.commit()
     return {"detail": "Announcement deleted"}
 
+# ── Admin ERP Management ──────────────────────────────────────────────────────
+
+@app.get("/admin/erp/teachers")
+@app.get("/api/admin/erp/teachers")
+def admin_list_erp_teachers(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    teachers = db.query(models.ErpUser).filter(models.ErpUser.role == "teacher").order_by(models.ErpUser.full_name).all()
+    result = []
+    for t in teachers:
+        profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id == t.id).first()
+        if not profile:
+            continue
+        assignments = db.query(models.TeacherSubjectAssignment).filter(
+            models.TeacherSubjectAssignment.teacher_id == profile.id
+        ).all()
+        asgn_out = []
+        for a in assignments:
+            cs = db.query(models.ClassSection).filter(models.ClassSection.id == a.class_section_id).first()
+            subj = db.query(models.Subject).filter(models.Subject.id == a.subject_id).first()
+            asgn_out.append({
+                "id": a.id,
+                "class_section_id": a.class_section_id,
+                "subject_id": a.subject_id,
+                "academic_year": a.academic_year,
+                "is_class_teacher": a.is_class_teacher,
+                "class_section": {"id": cs.id, "class_name": cs.class_name, "section": cs.section, "academic_year": cs.academic_year} if cs else None,
+                "subject": {"id": subj.id, "name": subj.name, "code": subj.code} if subj else None,
+            })
+        result.append({
+            "user": {"id": t.id, "email": t.email, "full_name": t.full_name, "role": t.role, "phone": t.phone},
+            "profile": {"id": profile.id, "employee_no": profile.employee_no, "department": profile.department, "subject": profile.subject},
+            "assignments": asgn_out,
+        })
+    return result
+
+
+@app.post("/admin/erp/teachers")
+@app.post("/api/admin/erp/teachers")
+def admin_create_erp_teacher(payload: schemas.AdminCreateTeacher, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    if db.query(models.ErpUser).filter(models.ErpUser.email == payload.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    user = models.ErpUser(
+        email=payload.email,
+        hashed_password=pwd_context.hash(payload.password or "teacher123"),
+        role="teacher",
+        full_name=payload.full_name,
+        phone=payload.phone,
+    )
+    db.add(user)
+    db.flush()
+    emp_no = f"NEV-T-{db.query(models.TeacherProfile).count() + 1:03d}"
+    profile = models.TeacherProfile(
+        user_id=user.id,
+        employee_no=emp_no,
+        department=payload.department,
+        subject=payload.subject,
+        phone=payload.phone,
+        class_teacher_of=payload.class_teacher_of,
+    )
+    db.add(profile)
+    db.commit()
+    db.refresh(user)
+    return {"message": "Teacher created", "email": user.email, "default_password": payload.password or "teacher123"}
+
+
+@app.post("/admin/erp/teacher-assignments")
+@app.post("/api/admin/erp/teacher-assignments")
+def admin_create_teacher_assignment(payload: schemas.AdminAssignTeacher, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == payload.teacher_profile_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Teacher profile not found")
+    cs = db.query(models.ClassSection).filter(models.ClassSection.id == payload.class_section_id).first()
+    if not cs:
+        raise HTTPException(status_code=404, detail="Class section not found")
+    existing = db.query(models.TeacherSubjectAssignment).filter(
+        models.TeacherSubjectAssignment.teacher_id == profile.id,
+        models.TeacherSubjectAssignment.class_section_id == payload.class_section_id,
+        models.TeacherSubjectAssignment.subject_id == payload.subject_id,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Assignment already exists")
+    a = models.TeacherSubjectAssignment(
+        teacher_id=profile.id,
+        subject_id=payload.subject_id,
+        class_section_id=payload.class_section_id,
+        academic_year=payload.academic_year or cs.academic_year,
+        is_class_teacher=payload.is_class_teacher,
+    )
+    db.add(a)
+    if payload.is_class_teacher:
+        profile.class_teacher_of = f"Class {cs.class_name} {cs.section}"
+    db.commit()
+    db.refresh(a)
+    subj = db.query(models.Subject).filter(models.Subject.id == a.subject_id).first()
+    return {
+        "id": a.id,
+        "class_section_id": a.class_section_id,
+        "subject_id": a.subject_id,
+        "academic_year": a.academic_year,
+        "is_class_teacher": a.is_class_teacher,
+        "class_section": {"id": cs.id, "class_name": cs.class_name, "section": cs.section, "academic_year": cs.academic_year},
+        "subject": {"id": subj.id, "name": subj.name, "code": subj.code} if subj else None,
+    }
+
+
+@app.delete("/admin/erp/teacher-assignments/{assignment_id}")
+@app.delete("/api/admin/erp/teacher-assignments/{assignment_id}")
+def admin_delete_teacher_assignment(assignment_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    a = db.query(models.TeacherSubjectAssignment).filter(models.TeacherSubjectAssignment.id == assignment_id).first()
+    if not a:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+    db.delete(a)
+    db.commit()
+    return {"detail": "Assignment removed"}
+
+
+@app.get("/admin/erp/class-sections")
+@app.get("/api/admin/erp/class-sections")
+def admin_list_class_sections(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return db.query(models.ClassSection).order_by(models.ClassSection.class_name, models.ClassSection.section).all()
+
+
+@app.post("/admin/erp/class-sections")
+@app.post("/api/admin/erp/class-sections")
+def admin_create_class_section(payload: schemas.ClassSectionCreate, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    existing = db.query(models.ClassSection).filter(
+        models.ClassSection.class_name == payload.class_name,
+        models.ClassSection.section == payload.section,
+        models.ClassSection.academic_year == payload.academic_year,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Class {payload.class_name}-{payload.section} already exists")
+    cs = models.ClassSection(class_name=payload.class_name, section=payload.section, academic_year=payload.academic_year, is_active=True)
+    db.add(cs)
+    db.commit()
+    db.refresh(cs)
+    return cs
+
+
+@app.get("/admin/erp/subjects")
+@app.get("/api/admin/erp/subjects")
+def admin_list_subjects(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return db.query(models.Subject).order_by(models.Subject.name).all()
+
+
+@app.post("/admin/erp/subjects")
+@app.post("/api/admin/erp/subjects")
+def admin_create_subject(payload: schemas.AdminCreateSubject, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    if db.query(models.Subject).filter(models.Subject.code == payload.code).first():
+        raise HTTPException(status_code=400, detail="Subject code already exists")
+    s = models.Subject(name=payload.name, code=payload.code, description=payload.description)
+    db.add(s)
+    db.commit()
+    db.refresh(s)
+    return s
+
+
+@app.get("/admin/erp/fees/summary")
+@app.get("/api/admin/erp/fees/summary")
+def admin_fee_summary(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    invoices = db.query(models.FeeInvoice).all()
+    payments = db.query(models.FeePayment).filter(models.FeePayment.status == "paid").all()
+    total_billed = sum(i.amount_paise for i in invoices)
+    total_collected = sum(p.amount_paise for p in payments)
+    return {
+        "total_billed_paise": total_billed,
+        "total_collected_paise": total_collected,
+        "outstanding_paise": max(0, total_billed - total_collected),
+        "invoice_count": len(invoices),
+        "payment_count": len(payments),
+    }
+
+
+@app.get("/admin/erp/fees/students")
+@app.get("/api/admin/erp/fees/students")
+def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    students = db.query(models.StudentProfile).order_by(
+        models.StudentProfile.class_name, models.StudentProfile.section, models.StudentProfile.roll_no
+    ).all()
+    result = []
+    for s in students:
+        user = db.query(models.ErpUser).filter(models.ErpUser.id == s.user_id).first()
+        if not user:
+            continue
+        invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == s.id).order_by(models.FeeInvoice.due_date).all()
+        payments = db.query(models.FeePayment).filter(
+            models.FeePayment.student_id == s.id,
+            models.FeePayment.status == "paid",
+        ).order_by(models.FeePayment.paid_at.desc()).all()
+        due = sum(invoice_balance(inv) for inv in invoices)
+        result.append({
+            "student_id": s.id,
+            "full_name": user.full_name,
+            "admission_no": s.admission_no,
+            "class_name": s.class_name,
+            "section": s.section,
+            "fee_due_paise": due,
+            "invoices": [
+                {
+                    "id": inv.id, "invoice_no": inv.invoice_no, "title": inv.title,
+                    "term": inv.term, "amount_paise": inv.amount_paise,
+                    "paid_paise": inv.paid_paise or 0, "due_date": str(inv.due_date),
+                    "status": inv.status,
+                    "balance_paise": invoice_balance(inv),
+                }
+                for inv in invoices
+            ],
+            "payments": [
+                {
+                    "id": p.id, "amount_paise": p.amount_paise, "method": p.method,
+                    "receipt_no": p.receipt_no, "paid_at": p.paid_at.isoformat() if p.paid_at else None,
+                }
+                for p in payments
+            ],
+        })
+    return result
+
+
+@app.post("/admin/erp/fee-invoices")
+@app.post("/api/admin/erp/fee-invoices")
+def admin_create_invoice(payload: schemas.AdminCreateInvoice, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    count = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == payload.student_id).count()
+    invoice_no = payload.invoice_no or f"NEV-FEE-{student.admission_no}-{count + 1:02d}"
+    inv = models.FeeInvoice(
+        student_id=payload.student_id,
+        invoice_no=invoice_no,
+        title=payload.title,
+        term=payload.term,
+        amount_paise=payload.amount_paise,
+        paid_paise=0,
+        due_date=payload.due_date,
+        status="pending",
+    )
+    db.add(inv)
+    db.commit()
+    db.refresh(inv)
+    return {
+        "id": inv.id, "invoice_no": inv.invoice_no, "title": inv.title,
+        "term": inv.term, "amount_paise": inv.amount_paise,
+        "paid_paise": 0, "due_date": str(inv.due_date), "status": inv.status, "balance_paise": inv.amount_paise,
+    }
+
+
+@app.post("/admin/erp/fee-payments/manual")
+@app.post("/api/admin/erp/fee-payments/manual")
+def admin_manual_payment(payload: schemas.AdminManualPayment, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == payload.invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    balance = invoice_balance(invoice)
+    if balance <= 0:
+        raise HTTPException(status_code=400, detail="Invoice is already fully paid")
+    amount = min(payload.amount_paise, balance)
+    payment = models.FeePayment(
+        invoice_id=invoice.id,
+        student_id=invoice.student_id,
+        amount_paise=amount,
+        method=payload.method,
+        status="paid",
+        paid_at=datetime.now(timezone.utc),
+    )
+    db.add(payment)
+    db.flush()
+    payment.receipt_no = generate_receipt_no(payment.id)
+    invoice.paid_paise = (invoice.paid_paise or 0) + amount
+    sync_invoice_status(invoice)
+    db.commit()
+    db.refresh(payment)
+    return {
+        "id": payment.id, "receipt_no": payment.receipt_no, "amount_paise": payment.amount_paise,
+        "method": payment.method, "paid_at": payment.paid_at.isoformat(),
+        "invoice_status": invoice.status,
+        "invoice_balance_paise": invoice_balance(invoice),
+    }
+
+
+@app.get("/admin/erp/receipts/{payment_id}", response_model=schemas.ReceiptOut)
+@app.get("/api/admin/erp/receipts/{payment_id}", response_model=schemas.ReceiptOut)
+def admin_get_receipt(payment_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    payment = db.query(models.FeePayment).filter(models.FeePayment.id == payment_id).first()
+    if not payment or payment.status != "paid":
+        raise HTTPException(status_code=404, detail="Paid receipt not found")
+    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == payment.invoice_id).first()
+    profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == payment.student_id).first()
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first() if profile else None
+    if not invoice or not profile or not student_user:
+        raise HTTPException(status_code=404, detail="Receipt data not found")
+    return {
+        "school_name": "Narendra Edu Valley",
+        "receipt_no": payment.receipt_no or generate_receipt_no(payment.id),
+        "issued_at": payment.paid_at or datetime.now(timezone.utc),
+        "student": student_user,
+        "profile": profile,
+        "invoice": invoice,
+        "payment": payment,
+    }
+
+
+@app.get("/admin/erp/timetable/{class_section_id}")
+@app.get("/api/admin/erp/timetable/{class_section_id}")
+def admin_get_timetable(
+    class_section_id: int,
+    academic_year: Optional[str] = None,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.TimetableSlot).filter(
+        models.TimetableSlot.class_section_id == class_section_id
+    )
+    if academic_year:
+        query = query.filter(models.TimetableSlot.academic_year == academic_year)
+    slots = query.order_by(models.TimetableSlot.day_of_week, models.TimetableSlot.period_no).all()
+    result = []
+    for s in slots:
+        subj = db.query(models.Subject).filter(models.Subject.id == s.subject_id).first() if s.subject_id else None
+        result.append({
+            "id": s.id,
+            "day_of_week": s.day_of_week,
+            "period_no": s.period_no,
+            "start_time": s.start_time,
+            "end_time": s.end_time,
+            "subject_id": s.subject_id,
+            "teacher_id": s.teacher_id,
+            "is_break": s.is_break,
+            "subject": {"id": subj.id, "name": subj.name, "code": subj.code} if subj else None,
+        })
+    return result
+
+
+@app.put("/admin/erp/timetable/{class_section_id}")
+@app.put("/api/admin/erp/timetable/{class_section_id}")
+def admin_upsert_timetable(
+    class_section_id: int,
+    payload: schemas.TimetableUpsert,
+    admin=Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    db.query(models.TimetableSlot).filter(
+        models.TimetableSlot.class_section_id == class_section_id,
+        models.TimetableSlot.academic_year == payload.academic_year,
+    ).delete()
+    for slot in payload.slots:
+        db.add(models.TimetableSlot(
+            class_section_id=class_section_id,
+            academic_year=payload.academic_year,
+            day_of_week=slot.day_of_week,
+            period_no=slot.period_no,
+            start_time=slot.start_time,
+            end_time=slot.end_time,
+            subject_id=slot.subject_id,
+            teacher_id=slot.teacher_id,
+            is_break=slot.is_break,
+        ))
+    db.commit()
+    return {"message": f"Timetable saved — {len(payload.slots)} slots"}
+
+
+# ERP
+@app.get("/erp/me", response_model=schemas.ErpUserPublic)
+@app.get("/api/erp/me", response_model=schemas.ErpUserPublic)
+def get_erp_me(user: models.ErpUser = Depends(get_current_erp_user)):
+    return user
+
+@app.get("/erp/student/dashboard", response_model=schemas.StudentDashboard)
+@app.get("/api/erp/student/dashboard", response_model=schemas.StudentDashboard)
+def get_student_dashboard(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    profile = get_student_profile_for_user(user, db)
+    invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id == profile.id
+    ).order_by(models.FeeInvoice.due_date.asc()).all()
+    payments = db.query(models.FeePayment).filter(
+        models.FeePayment.student_id == profile.id,
+        models.FeePayment.status == "paid",
+    ).order_by(models.FeePayment.paid_at.desc()).all()
+    leaves = db.query(models.LeaveRequest).filter(
+        models.LeaveRequest.student_id == profile.id
+    ).order_by(models.LeaveRequest.created_at.desc()).all()
+    marks = db.query(models.MarkEntry).filter(
+        models.MarkEntry.student_id == profile.id
+    ).order_by(models.MarkEntry.exam_date.desc()).all()
+    attendance = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id == profile.id
+    ).order_by(models.AttendanceRecord.date.desc()).all()
+    fee_due = sum(invoice_balance(invoice) for invoice in invoices)
+    stats = {
+        "fee_due_paise": fee_due,
+        "total_paid_paise": sum(payment.amount_paise for payment in payments),
+        "pending_leaves": len([leave for leave in leaves if leave.status == "pending"]),
+        "approved_leaves": len([leave for leave in leaves if leave.status == "approved"]),
+        "attendance_percent": attendance_percent(attendance),
+        "average_percent": average_percent(marks),
+        "receipt_count": len(payments),
+    }
+    return {
+        "user": user,
+        "profile": profile,
+        "invoices": invoices,
+        "payments": payments,
+        "leaves": leaves,
+        "marks": marks,
+        "attendance": attendance,
+        "stats": stats,
+    }
+
+@app.get("/erp/teacher/dashboard", response_model=schemas.TeacherDashboard)
+@app.get("/api/erp/teacher/dashboard", response_model=schemas.TeacherDashboard)
+def get_teacher_dashboard(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    from datetime import date as date_type
+    profile = get_teacher_profile_for_user(user, db)
+
+    # Discover teacher's assigned class sections
+    assignments = db.query(models.TeacherSubjectAssignment).filter(
+        models.TeacherSubjectAssignment.teacher_id == profile.id
+    ).all()
+    assigned_cs_ids = list({a.class_section_id for a in assignments if a.class_section_id})
+
+    # Filter students to only the teacher's classes
+    if assigned_cs_ids:
+        enrolled_ids = {
+            e.student_id
+            for e in db.query(models.StudentClassEnrollment).filter(
+                models.StudentClassEnrollment.class_section_id.in_(assigned_cs_ids),
+                models.StudentClassEnrollment.is_current == True,
+            ).all()
+        }
+        profile_ids = {
+            p.id
+            for p in db.query(models.StudentProfile).filter(
+                models.StudentProfile.class_section_id.in_(assigned_cs_ids),
+            ).all()
+        }
+        all_ids = enrolled_ids | profile_ids
+        students = db.query(models.StudentProfile).filter(
+            models.StudentProfile.id.in_(list(all_ids))
+        ).order_by(
+            models.StudentProfile.class_name,
+            models.StudentProfile.section,
+            models.StudentProfile.roll_no,
+        ).all()
+    else:
+        # No assignments yet — show all students as fallback
+        students = db.query(models.StudentProfile).order_by(
+            models.StudentProfile.class_name,
+            models.StudentProfile.section,
+            models.StudentProfile.roll_no,
+        ).all()
+
+    leaves = db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
+    marks = db.query(models.MarkEntry).order_by(models.MarkEntry.exam_date.desc()).all()
+
+    student_summaries = [build_student_summary(s, db) for s in students]
+
+    needs_attention_count = sum(
+        1 for ss in student_summaries
+        if ss["attendance_percent"] < 75 or ss["latest_average_percent"] < 50
+    )
+
+    today = date_type.today()
+    attendance_marked_today = False
+    if students:
+        attendance_marked_today = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.date == today,
+            models.AttendanceRecord.student_id.in_([s.id for s in students]),
+        ).first() is not None
+
+    assigned_sections = []
+    if assigned_cs_ids:
+        cs_list = db.query(models.ClassSection).filter(
+            models.ClassSection.id.in_(assigned_cs_ids)
+        ).order_by(models.ClassSection.class_name, models.ClassSection.section).all()
+        assigned_sections = [
+            {"id": cs.id, "class_name": cs.class_name, "section": cs.section, "academic_year": cs.academic_year}
+            for cs in cs_list
+        ]
+
+    stats = {
+        "student_count": len(students),
+        "pending_leaves": len([l for l in leaves if l.status == "pending"]),
+        "marks_recorded": len(marks),
+        "class_average_percent": average_percent(marks),
+        "needs_attention_count": needs_attention_count,
+        "attendance_marked_today": attendance_marked_today,
+        "assigned_class_sections": assigned_sections,
+    }
+    return {
+        "user": user,
+        "profile": profile,
+        "students": student_summaries,
+        "leaves": leaves,
+        "marks": marks,
+        "stats": stats,
+    }
+
+@app.post("/erp/leaves", response_model=schemas.LeaveRequestOut)
+@app.post("/api/erp/leaves", response_model=schemas.LeaveRequestOut)
+def create_leave_request(
+    leave: schemas.LeaveRequestCreate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    profile = get_student_profile_for_user(user, db)
+    days_count = (leave.to_date - leave.from_date).days + 1
+    if days_count <= 0:
+        raise HTTPException(status_code=400, detail="Leave end date must be on or after start date")
+    teacher = db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.class_teacher_of == f"Class {profile.class_name} {profile.section}"
+    ).first() or db.query(models.TeacherProfile).first()
+    obj = models.LeaveRequest(
+        student_id=profile.id,
+        teacher_id=teacher.id if teacher else None,
+        from_date=leave.from_date,
+        to_date=leave.to_date,
+        days_count=days_count,
+        reason=leave.reason,
+        status="pending",
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+@app.patch("/erp/leaves/{leave_id}", response_model=schemas.LeaveRequestOut)
+@app.patch("/api/erp/leaves/{leave_id}", response_model=schemas.LeaveRequestOut)
+def update_leave_request(
+    leave_id: int,
+    payload: schemas.LeaveRequestUpdate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    obj = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Leave request not found")
+    obj.status = payload.status
+    obj.reviewer_note = payload.reviewer_note
+    obj.teacher_id = teacher.id
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+def grade_from_percent(percent: float) -> str:
+    if percent >= 90:
+        return "A+"
+    if percent >= 80:
+        return "A"
+    if percent >= 70:
+        return "B+"
+    if percent >= 60:
+        return "B"
+    if percent >= 50:
+        return "C"
+    return "D"
+
+@app.post("/erp/marks", response_model=schemas.MarkEntryOut)
+@app.post("/api/erp/marks", response_model=schemas.MarkEntryOut)
+def create_mark_entry(
+    payload: schemas.MarkEntryCreate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    if payload.marks_obtained > payload.max_marks:
+        raise HTTPException(status_code=400, detail="Marks obtained cannot exceed maximum marks")
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    percent = (payload.marks_obtained / payload.max_marks) * 100
+    obj = models.MarkEntry(
+        student_id=payload.student_id,
+        teacher_id=teacher.id,
+        subject=payload.subject,
+        exam_name=payload.exam_name,
+        marks_obtained=payload.marks_obtained,
+        max_marks=payload.max_marks,
+        grade=payload.grade or grade_from_percent(percent),
+        remarks=payload.remarks,
+        exam_date=payload.exam_date,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+@app.post("/erp/payments/razorpay/order", response_model=schemas.RazorpayOrderResponse)
+@app.post("/api/erp/payments/razorpay/order", response_model=schemas.RazorpayOrderResponse)
+def create_razorpay_order(
+    payload: schemas.RazorpayOrderRequest,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    student = get_student_profile_for_user(user, db)
+    invoice = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.id == payload.invoice_id,
+        models.FeeInvoice.student_id == student.id,
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    amount_due = invoice_balance(invoice)
+    if amount_due <= 0:
+        raise HTTPException(status_code=400, detail="Invoice is already paid")
+
+    key_id = os.getenv("RAZORPAY_KEY_ID")
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET")
+    receipt = f"{invoice.invoice_no}-{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}"
+    if not key_id or not key_secret:
+        return {
+            "order_id": None,
+            "amount_paise": amount_due,
+            "currency": "INR",
+            "key_id": None,
+            "receipt": receipt,
+            "invoice_id": invoice.id,
+            "payment_id": None,
+            "razorpay_available": False,
+            "message": "Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the backend to enable online fee payment.",
+        }
+
+    order_payload = {
+        "amount": amount_due,
+        "currency": "INR",
+        "receipt": receipt,
+        "notes": {
+            "invoice_no": invoice.invoice_no,
+            "student_admission_no": student.admission_no,
+            "student_name": user.full_name,
+        },
+    }
+    credentials = base64.b64encode(f"{key_id}:{key_secret}".encode("utf-8")).decode("utf-8")
+    request = urllib.request.Request(
+        "https://api.razorpay.com/v1/orders",
+        data=json.dumps(order_payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Basic {credentials}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=20) as response:
+            order = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace")
+        raise HTTPException(status_code=502, detail=f"Razorpay order failed: {detail}")
+    except urllib.error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Could not connect to Razorpay: {exc.reason}")
+
+    payment = models.FeePayment(
+        invoice_id=invoice.id,
+        student_id=student.id,
+        amount_paise=amount_due,
+        method="razorpay",
+        status="created",
+        razorpay_order_id=order.get("id"),
+    )
+    db.add(payment)
+    db.commit()
+    db.refresh(payment)
+    return {
+        "order_id": order.get("id"),
+        "amount_paise": amount_due,
+        "currency": order.get("currency", "INR"),
+        "key_id": key_id,
+        "receipt": receipt,
+        "invoice_id": invoice.id,
+        "payment_id": payment.id,
+        "razorpay_available": True,
+        "message": None,
+    }
+
+@app.post("/erp/payments/razorpay/verify", response_model=schemas.FeePaymentOut)
+@app.post("/api/erp/payments/razorpay/verify", response_model=schemas.FeePaymentOut)
+def verify_razorpay_payment(
+    payload: schemas.RazorpayVerifyRequest,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    student = get_student_profile_for_user(user, db)
+    key_secret = os.getenv("RAZORPAY_KEY_SECRET")
+    if not key_secret:
+        raise HTTPException(status_code=500, detail="Razorpay secret is not configured")
+
+    signed_payload = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8")
+    expected_signature = hmac.new(
+        key_secret.encode("utf-8"),
+        signed_payload,
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected_signature, payload.razorpay_signature):
+        raise HTTPException(status_code=400, detail="Payment signature verification failed")
+
+    payment = db.query(models.FeePayment).filter(
+        models.FeePayment.razorpay_order_id == payload.razorpay_order_id,
+        models.FeePayment.invoice_id == payload.invoice_id,
+        models.FeePayment.student_id == student.id,
+        models.FeePayment.status == "created",
+    ).first()
+    if not payment:
+        raise HTTPException(status_code=404, detail="Pending payment record not found")
+
+    invoice = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.id == payment.invoice_id,
+        models.FeeInvoice.student_id == student.id,
+    ).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+
+    payment.status = "paid"
+    payment.razorpay_payment_id = payload.razorpay_payment_id
+    payment.paid_at = datetime.now(timezone.utc)
+    payment.receipt_no = payment.receipt_no or generate_receipt_no(payment.id)
+    invoice.paid_paise = min(invoice.amount_paise, (invoice.paid_paise or 0) + payment.amount_paise)
+    sync_invoice_status(invoice)
+    db.commit()
+    db.refresh(payment)
+    return payment
+
+@app.get("/erp/receipts/{payment_id}", response_model=schemas.ReceiptOut)
+@app.get("/api/erp/receipts/{payment_id}", response_model=schemas.ReceiptOut)
+def get_fee_receipt(
+    payment_id: int,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    payment = db.query(models.FeePayment).filter(models.FeePayment.id == payment_id).first()
+    if not payment or payment.status != "paid":
+        raise HTTPException(status_code=404, detail="Paid receipt not found")
+    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == payment.invoice_id).first()
+    profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == payment.student_id).first()
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first() if profile else None
+    if not invoice or not profile or not student_user:
+        raise HTTPException(status_code=404, detail="Receipt data not found")
+    if user.role == "student" and profile.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view another student's receipt")
+    if not payment.receipt_no:
+        payment.receipt_no = generate_receipt_no(payment.id)
+        db.commit()
+        db.refresh(payment)
+    return {
+        "school_name": "Narendra Edu Valley",
+        "receipt_no": payment.receipt_no,
+        "issued_at": payment.paid_at or payment.created_at,
+        "student": student_user,
+        "profile": profile,
+        "invoice": invoice,
+        "payment": payment,
+    }
+
 # Image Serving (with caching headers)
 @app.get("/images/{image_id}")
 @app.get("/api/images/{image_id}")
@@ -281,6 +1407,600 @@ def get_image(image_id: int, db: Session = Depends(get_db)):
             "ETag": f'"{etag}"',
         },
     )
+
+@app.post("/erp/teacher/students")
+@app.post("/api/erp/teacher/students")
+def add_student(
+    payload: schemas.AddStudentRequest,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    if db.query(models.ErpUser).filter(models.ErpUser.email == payload.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    if db.query(models.StudentProfile).filter(models.StudentProfile.admission_no == payload.admission_no).first():
+        raise HTTPException(status_code=400, detail="Admission number already exists")
+
+    if payload.date_of_birth:
+        dob = payload.date_of_birth
+        default_password = f"{dob.day:02d}{dob.month:02d}{dob.year}"
+    else:
+        default_password = "student123"
+
+    new_user = models.ErpUser(
+        email=payload.email,
+        hashed_password=pwd_context.hash(default_password),
+        role="student",
+        full_name=payload.full_name,
+        phone=payload.phone,
+        is_active=True,
+    )
+    db.add(new_user)
+    db.flush()
+
+    new_profile = models.StudentProfile(
+        user_id=new_user.id,
+        admission_no=payload.admission_no,
+        roll_no=payload.roll_no,
+        class_name=payload.class_name,
+        section=payload.section,
+        guardian_name=payload.guardian_name,
+        guardian_phone=payload.guardian_phone,
+        address=payload.address,
+        date_of_birth=payload.date_of_birth,
+        blood_group=payload.blood_group,
+        status="active",
+        class_section_id=payload.class_section_id,
+    )
+    db.add(new_profile)
+    db.flush()
+
+    if payload.class_section_id and payload.academic_year:
+        db.add(models.StudentClassEnrollment(
+            student_id=new_profile.id,
+            class_section_id=payload.class_section_id,
+            academic_year=payload.academic_year,
+            roll_no=payload.roll_no,
+            is_current=True,
+        ))
+
+    db.commit()
+    db.refresh(new_profile)
+    return {
+        "message": "Student added successfully",
+        "student_id": new_profile.id,
+        "default_password": default_password,
+        "email": payload.email,
+    }
+
+
+@app.patch("/erp/teacher/students/{student_profile_id}/status")
+@app.patch("/api/erp/teacher/students/{student_profile_id}/status")
+def update_student_status(
+    student_profile_id: int,
+    payload: schemas.StudentStatusUpdate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_profile_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Student not found")
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first()
+
+    profile.status = payload.status
+    if student_user:
+        student_user.is_active = (payload.status == "active")
+
+    db.commit()
+    return {"message": f"Student status updated to {payload.status}", "status": payload.status}
+
+
+@app.get("/erp/students")
+@app.get("/api/erp/students")
+def get_all_students(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if user.role not in ("teacher", "admin"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    students = db.query(models.StudentProfile).order_by(
+        models.StudentProfile.class_name,
+        models.StudentProfile.section,
+        models.StudentProfile.roll_no,
+    ).all()
+    return [build_student_summary(s, db) for s in students]
+
+
+@app.get("/erp/class-sections", response_model=List[schemas.ClassSectionOut])
+@app.get("/api/erp/class-sections", response_model=List[schemas.ClassSectionOut])
+def get_class_sections(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.ClassSection).filter(models.ClassSection.is_active == True).order_by(
+        models.ClassSection.class_name, models.ClassSection.section
+    ).all()
+
+
+@app.post("/erp/class-sections", response_model=schemas.ClassSectionOut)
+@app.post("/api/erp/class-sections", response_model=schemas.ClassSectionOut)
+def create_class_section(
+    payload: schemas.ClassSectionCreate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if user.role not in ("teacher", "admin"):
+        raise HTTPException(status_code=403, detail="Not authorized")
+    existing = db.query(models.ClassSection).filter(
+        models.ClassSection.class_name == payload.class_name,
+        models.ClassSection.section == payload.section,
+        models.ClassSection.academic_year == payload.academic_year,
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail=f"Class {payload.class_name}-{payload.section} ({payload.academic_year}) already exists")
+    cs = models.ClassSection(
+        class_name=payload.class_name,
+        section=payload.section,
+        academic_year=payload.academic_year,
+        is_active=True,
+    )
+    db.add(cs)
+    db.commit()
+    db.refresh(cs)
+    return cs
+
+
+@app.get("/erp/class-sections/{class_section_id}/students")
+@app.get("/api/erp/class-sections/{class_section_id}/students")
+def get_class_section_students(
+    class_section_id: int,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    # Students formally enrolled
+    enrolled_ids = {
+        e.student_id
+        for e in db.query(models.StudentClassEnrollment).filter(
+            models.StudentClassEnrollment.class_section_id == class_section_id,
+            models.StudentClassEnrollment.is_current == True,
+        ).all()
+    }
+    # Students linked via profile.class_section_id (added without formal enrollment)
+    profile_ids = {
+        p.id
+        for p in db.query(models.StudentProfile).filter(
+            models.StudentProfile.class_section_id == class_section_id,
+        ).all()
+    }
+    all_ids = enrolled_ids | profile_ids
+    if not all_ids:
+        return []
+    profiles = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id.in_(list(all_ids))
+    ).order_by(models.StudentProfile.roll_no, models.StudentProfile.class_name).all()
+    return [build_student_summary(p, db) for p in profiles]
+
+
+@app.get("/erp/subjects", response_model=List[schemas.SubjectOut])
+@app.get("/api/erp/subjects", response_model=List[schemas.SubjectOut])
+def get_subjects(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.Subject).order_by(models.Subject.name).all()
+
+
+@app.get("/erp/teacher/assignments", response_model=List[schemas.TeacherAssignmentOut])
+@app.get("/api/erp/teacher/assignments", response_model=List[schemas.TeacherAssignmentOut])
+def get_teacher_assignments(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    assignments = db.query(models.TeacherSubjectAssignment).filter(
+        models.TeacherSubjectAssignment.teacher_id == teacher.id
+    ).all()
+    result = []
+    for a in assignments:
+        subject = db.query(models.Subject).filter(models.Subject.id == a.subject_id).first()
+        cs = db.query(models.ClassSection).filter(models.ClassSection.id == a.class_section_id).first()
+        result.append({
+            "id": a.id,
+            "teacher_id": a.teacher_id,
+            "subject_id": a.subject_id,
+            "class_section_id": a.class_section_id,
+            "academic_year": a.academic_year,
+            "is_class_teacher": a.is_class_teacher,
+            "subject": subject,
+            "class_section": cs,
+        })
+    return result
+
+
+@app.get("/erp/attendance/class/{class_section_id}/date/{attendance_date}")
+@app.get("/api/erp/attendance/class/{class_section_id}/date/{attendance_date}")
+def get_class_attendance(
+    class_section_id: int,
+    attendance_date: date,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    enrollments = db.query(models.StudentClassEnrollment).filter(
+        models.StudentClassEnrollment.class_section_id == class_section_id,
+        models.StudentClassEnrollment.is_current == True,
+    ).all()
+    student_ids = [e.student_id for e in enrollments]
+    records = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id.in_(student_ids),
+        models.AttendanceRecord.date == attendance_date,
+    ).all()
+    record_map = {r.student_id: r for r in records}
+    result = []
+    for enrollment in enrollments:
+        student_profile = db.query(models.StudentProfile).filter(
+            models.StudentProfile.id == enrollment.student_id
+        ).first()
+        student_user = db.query(models.ErpUser).filter(
+            models.ErpUser.id == student_profile.user_id
+        ).first() if student_profile else None
+        record = record_map.get(enrollment.student_id)
+        result.append({
+            "student_id": enrollment.student_id,
+            "student_name": student_user.full_name if student_user else "Unknown",
+            "roll_no": enrollment.roll_no,
+            "status": record.status if record else "present",
+            "note": record.note if record else None,
+            "record_id": record.id if record else None,
+        })
+    result.sort(key=lambda x: (x["roll_no"] or "zzz"))
+    return result
+
+
+@app.post("/erp/attendance/bulk")
+@app.post("/api/erp/attendance/bulk")
+def bulk_mark_attendance(
+    payload: schemas.BulkAttendanceCreate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    for record_data in payload.records:
+        existing = db.query(models.AttendanceRecord).filter(
+            models.AttendanceRecord.student_id == record_data.student_id,
+            models.AttendanceRecord.date == payload.date,
+        ).first()
+        if existing:
+            existing.status = record_data.status
+            existing.note = record_data.note
+            existing.class_section_id = payload.class_section_id
+            existing.marked_by_teacher_id = teacher.id
+        else:
+            enrollment = db.query(models.StudentClassEnrollment).filter(
+                models.StudentClassEnrollment.student_id == record_data.student_id,
+                models.StudentClassEnrollment.is_current == True,
+            ).first()
+            db.add(models.AttendanceRecord(
+                student_id=record_data.student_id,
+                date=payload.date,
+                status=record_data.status,
+                note=record_data.note,
+                class_section_id=payload.class_section_id,
+                marked_by_teacher_id=teacher.id,
+                enrollment_id=enrollment.id if enrollment else None,
+            ))
+    db.commit()
+    return {"message": f"Attendance marked for {len(payload.records)} students"}
+
+
+@app.get("/erp/exam-schedules", response_model=List[schemas.ExamScheduleOut])
+@app.get("/api/erp/exam-schedules", response_model=List[schemas.ExamScheduleOut])
+def get_exam_schedules(
+    class_section_id: Optional[int] = None,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    query = db.query(models.ExamSchedule)
+    if class_section_id:
+        query = query.filter(models.ExamSchedule.class_section_id == class_section_id)
+    exams = query.order_by(models.ExamSchedule.exam_date.asc()).all()
+    result = []
+    for exam in exams:
+        subject = db.query(models.Subject).filter(models.Subject.id == exam.subject_id).first()
+        result.append({
+            "id": exam.id,
+            "class_section_id": exam.class_section_id,
+            "subject_id": exam.subject_id,
+            "exam_name": exam.exam_name,
+            "exam_date": exam.exam_date,
+            "start_time": exam.start_time,
+            "end_time": exam.end_time,
+            "venue": exam.venue,
+            "hall_no": exam.hall_no,
+            "academic_year": exam.academic_year,
+            "max_marks": exam.max_marks,
+            "subject": subject,
+        })
+    return result
+
+
+@app.get("/erp/timetable/{class_section_id}", response_model=List[schemas.TimetableSlotOut])
+@app.get("/api/erp/timetable/{class_section_id}", response_model=List[schemas.TimetableSlotOut])
+def get_timetable(
+    class_section_id: int,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    slots = db.query(models.TimetableSlot).filter(
+        models.TimetableSlot.class_section_id == class_section_id,
+    ).order_by(models.TimetableSlot.day_of_week, models.TimetableSlot.period_no).all()
+    result = []
+    for slot in slots:
+        subject = db.query(models.Subject).filter(models.Subject.id == slot.subject_id).first() if slot.subject_id else None
+        result.append({
+            "id": slot.id,
+            "class_section_id": slot.class_section_id,
+            "academic_year": slot.academic_year,
+            "day_of_week": slot.day_of_week,
+            "period_no": slot.period_no,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "subject_id": slot.subject_id,
+            "teacher_id": slot.teacher_id,
+            "is_break": slot.is_break,
+            "subject": subject,
+        })
+    return result
+
+
+@app.get("/erp/analytics/student/{student_profile_id}")
+@app.get("/api/erp/analytics/student/{student_profile_id}")
+def get_student_analytics(
+    student_profile_id: int,
+    academic_year: Optional[str] = None,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if user.role == "student":
+        profile = get_student_profile_for_user(user, db)
+        if profile.id != student_profile_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_profile_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+
+    enrollments = db.query(models.StudentClassEnrollment).filter(
+        models.StudentClassEnrollment.student_id == student_profile_id
+    ).order_by(models.StudentClassEnrollment.created_at.asc()).all()
+
+    all_marks = db.query(models.MarkEntry).filter(
+        models.MarkEntry.student_id == student_profile_id
+    ).order_by(models.MarkEntry.exam_date.asc()).all()
+
+    all_attendance = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id == student_profile_id
+    ).all()
+
+    invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id == student_profile_id
+    ).all()
+
+    from collections import defaultdict
+    attendance_by_month = defaultdict(lambda: {"present": 0, "absent": 0, "leave": 0, "total": 0})
+    for record in all_attendance:
+        key = record.date.strftime("%Y-%m")
+        attendance_by_month[key][record.status] = attendance_by_month[key].get(record.status, 0) + 1
+        attendance_by_month[key]["total"] += 1
+
+    att_by_month_list = [
+        {"month": k, **v, "percent": round(v["present"] / v["total"] * 100, 1) if v["total"] > 0 else 0}
+        for k, v in sorted(attendance_by_month.items())
+    ]
+
+    marks_by_subject = defaultdict(lambda: {"total": 0, "max": 0, "count": 0})
+    for mark in all_marks:
+        marks_by_subject[mark.subject]["total"] += mark.marks_obtained
+        marks_by_subject[mark.subject]["max"] += mark.max_marks
+        marks_by_subject[mark.subject]["count"] += 1
+
+    marks_by_subject_list = [
+        {
+            "subject": k,
+            "average_percent": round(v["total"] / v["max"] * 100, 1) if v["max"] > 0 else 0,
+            "count": v["count"],
+        }
+        for k, v in marks_by_subject.items()
+    ]
+
+    marks_over_time = []
+    exam_groups = defaultdict(list)
+    for mark in all_marks:
+        exam_key = f"{mark.exam_name}|{mark.exam_date}"
+        exam_groups[exam_key].append(mark)
+
+    for exam_key, exam_marks in sorted(exam_groups.items(), key=lambda x: x[0].split("|")[1]):
+        exam_name, exam_date_str = exam_key.split("|", 1)
+        total_obt = sum(m.marks_obtained for m in exam_marks)
+        total_max = sum(m.max_marks for m in exam_marks)
+        entry = {
+            "exam_name": exam_name,
+            "exam_date": exam_date_str,
+            "overall_percent": round(total_obt / total_max * 100, 1) if total_max > 0 else 0,
+        }
+        for m in exam_marks:
+            entry[m.subject] = round(m.marks_obtained / m.max_marks * 100, 1) if m.max_marks > 0 else 0
+        marks_over_time.append(entry)
+
+    enrollment_list = []
+    for e in enrollments:
+        cs = db.query(models.ClassSection).filter(models.ClassSection.id == e.class_section_id).first()
+        enrollment_list.append({
+            "id": e.id,
+            "class_section_id": e.class_section_id,
+            "academic_year": e.academic_year,
+            "roll_no": e.roll_no,
+            "is_current": e.is_current,
+            "class_label": f"Class {cs.class_name}-{cs.section}" if cs else "Unknown",
+        })
+
+    fee_summary = {
+        "total_due_paise": sum(i.amount_paise for i in invoices),
+        "total_paid_paise": sum(i.paid_paise or 0 for i in invoices),
+        "pending_count": len([i for i in invoices if i.status != "paid"]),
+    }
+
+    return {
+        "attendance_by_month": att_by_month_list,
+        "marks_by_subject": marks_by_subject_list,
+        "marks_over_time": marks_over_time,
+        "fee_summary": fee_summary,
+        "enrollments": enrollment_list,
+    }
+
+
+@app.get("/erp/analytics/class/{class_section_id}")
+@app.get("/api/erp/analytics/class/{class_section_id}")
+def get_class_analytics(
+    class_section_id: int,
+    academic_year: Optional[str] = None,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    teacher = get_teacher_profile_for_user(user, db)
+    enrollments = db.query(models.StudentClassEnrollment).filter(
+        models.StudentClassEnrollment.class_section_id == class_section_id,
+        models.StudentClassEnrollment.is_current == True,
+    ).all()
+    student_ids = [e.student_id for e in enrollments]
+
+    # Fallback: if no enrollments yet, use all students in this class section
+    if not student_ids:
+        cs = db.query(models.ClassSection).filter(models.ClassSection.id == class_section_id).first()
+        if cs:
+            profiles = db.query(models.StudentProfile).filter(
+                models.StudentProfile.class_name == cs.class_name,
+                models.StudentProfile.section == cs.section,
+            ).all()
+            student_ids = [p.id for p in profiles]
+
+    all_marks = db.query(models.MarkEntry).filter(
+        models.MarkEntry.student_id.in_(student_ids)
+    ).all() if student_ids else []
+    all_attendance = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id.in_(student_ids)
+    ).all() if student_ids else []
+
+    from collections import defaultdict
+
+    # Per-student stats for "needs attention" and performers
+    student_stats = []
+    for student_id in student_ids:
+        profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+        user_obj = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first() if profile else None
+        s_marks = [m for m in all_marks if m.student_id == student_id]
+        s_att = [r for r in all_attendance if r.student_id == student_id]
+        att_pct = attendance_percent(s_att)
+        avg_marks = average_percent(s_marks)
+        student_stats.append({
+            "student_id": student_id,
+            "name": user_obj.full_name if user_obj else "Unknown",
+            "roll_no": profile.roll_no if profile else None,
+            "attendance_percent": att_pct,
+            "average_percent": avg_marks,
+            "marks_count": len(s_marks),
+            "attendance_count": len(s_att),
+        })
+
+    # Attendance by month (class-level aggregate)
+    attendance_by_month = defaultdict(lambda: {"present": 0, "absent": 0, "leave": 0, "total": 0})
+    for record in all_attendance:
+        key = record.date.strftime("%Y-%m")
+        attendance_by_month[key][record.status] = attendance_by_month[key].get(record.status, 0) + 1
+        attendance_by_month[key]["total"] += 1
+
+    att_by_month_list = []
+    for k, v in sorted(attendance_by_month.items()):
+        total = v["total"]
+        present = v.get("present", 0)
+        att_by_month_list.append({
+            "month": k,
+            "present": present,
+            "absent": v.get("absent", 0),
+            "leave": v.get("leave", 0),
+            "total": total,
+            "percent": round(present / total * 100, 1) if total > 0 else 0,
+        })
+
+    # Subject-level performance (class average per subject)
+    marks_by_subject = defaultdict(lambda: {"total": 0, "max": 0, "student_scores": []})
+    for mark in all_marks:
+        marks_by_subject[mark.subject]["total"] += mark.marks_obtained
+        marks_by_subject[mark.subject]["max"] += mark.max_marks
+
+    marks_by_subject_list = sorted([
+        {
+            "subject": k,
+            "average_percent": round(v["total"] / v["max"] * 100, 1) if v["max"] > 0 else 0,
+        }
+        for k, v in marks_by_subject.items()
+    ], key=lambda x: x["average_percent"], reverse=True)
+
+    # Grade distribution across all marks
+    grade_counts = {"A+": 0, "A": 0, "B+": 0, "B": 0, "C": 0, "D": 0}
+    for mark in all_marks:
+        if mark.max_marks:
+            pct = mark.marks_obtained / mark.max_marks * 100
+            if pct >= 90:
+                grade_counts["A+"] += 1
+            elif pct >= 80:
+                grade_counts["A"] += 1
+            elif pct >= 70:
+                grade_counts["B+"] += 1
+            elif pct >= 60:
+                grade_counts["B"] += 1
+            elif pct >= 50:
+                grade_counts["C"] += 1
+            else:
+                grade_counts["D"] += 1
+
+    # Class-level KPIs
+    students_with_att = [s for s in student_stats if s["attendance_count"] > 0]
+    overall_att = round(
+        sum(s["attendance_percent"] for s in students_with_att) / len(students_with_att), 1
+    ) if students_with_att else 0
+
+    students_with_marks = [s for s in student_stats if s["marks_count"] > 0]
+    overall_avg = round(
+        sum(s["average_percent"] for s in students_with_marks) / len(students_with_marks), 1
+    ) if students_with_marks else 0
+
+    below_75_att = [s for s in student_stats if s["attendance_count"] > 0 and s["attendance_percent"] < 75]
+    needs_attention = [
+        s for s in student_stats
+        if (s["attendance_count"] > 0 and s["attendance_percent"] < 75)
+        or (s["marks_count"] > 0 and s["average_percent"] < 50)
+    ]
+
+    # Performers (only among students who have marks)
+    ranked = sorted(students_with_marks, key=lambda x: x["average_percent"], reverse=True)
+    top_performers = ranked[:5]
+    struggling = ranked[-5:][::-1] if len(ranked) > 5 else []
+
+    return {
+        "student_count": len(student_ids),
+        "overall_attendance_percent": overall_att,
+        "overall_average_percent": overall_avg,
+        "below_75_attendance_count": len(below_75_att),
+        "marks_recorded": len(all_marks),
+        "attendance_by_month": att_by_month_list,
+        "marks_by_subject": marks_by_subject_list,
+        "grade_distribution": grade_counts,
+        "top_performers": top_performers,
+        "struggling_students": struggling,
+        "needs_attention": needs_attention,
+    }
+
 
 if __name__ == "__main__":
     import uvicorn

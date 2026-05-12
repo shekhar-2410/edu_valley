@@ -1,6 +1,7 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || ''; 
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
 export const API_ENDPOINTS = {
+    erpBase: `${API_BASE_URL}/erp`,
     events: `${API_BASE_URL}/events`,
     announcements: `${API_BASE_URL}/announcements`,
     faculty: `${API_BASE_URL}/faculty`,
@@ -9,6 +10,26 @@ export const API_ENDPOINTS = {
     login: `${API_BASE_URL}/auth/login`,
     upload: `${API_BASE_URL}/upload`,
     images: `${API_BASE_URL}/images`,
+    erpLogin: `${API_BASE_URL}/erp/auth/login`,
+    erpMe: `${API_BASE_URL}/erp/me`,
+    erpStudentDashboard: `${API_BASE_URL}/erp/student/dashboard`,
+    erpTeacherDashboard: `${API_BASE_URL}/erp/teacher/dashboard`,
+    erpLeaves: `${API_BASE_URL}/erp/leaves`,
+    erpMarks: `${API_BASE_URL}/erp/marks`,
+    erpRazorpayOrder: `${API_BASE_URL}/erp/payments/razorpay/order`,
+    erpRazorpayVerify: `${API_BASE_URL}/erp/payments/razorpay/verify`,
+    erpReceipts: `${API_BASE_URL}/erp/receipts`,
+    erpStudents: `${API_BASE_URL}/erp/students`,
+    erpClassSections: `${API_BASE_URL}/erp/class-sections`,
+    erpClassSectionStudents: (id) => `${API_BASE_URL}/erp/class-sections/${id}/students`,
+    erpSubjects: `${API_BASE_URL}/erp/subjects`,
+    erpTeacherAssignments: `${API_BASE_URL}/erp/teacher/assignments`,
+    erpAttendanceBulk: `${API_BASE_URL}/erp/attendance/bulk`,
+    erpAttendanceClass: `${API_BASE_URL}/erp/attendance/class`,
+    erpExamSchedules: `${API_BASE_URL}/erp/exam-schedules`,
+    erpTimetable: `${API_BASE_URL}/erp/timetable`,
+    erpStudentAnalytics: `${API_BASE_URL}/erp/analytics/student`,
+    erpClassAnalytics: `${API_BASE_URL}/erp/analytics/class`,
 };
 
 export default API_BASE_URL;
