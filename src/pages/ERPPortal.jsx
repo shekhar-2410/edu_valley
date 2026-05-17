@@ -298,8 +298,8 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
                         <School size={18} className="text-white" />
                     </div>
                     <div>
-                        <p className="text-xs font-black uppercase tracking-[0.2em] text-white/60">NEV School</p>
-                        <p className="text-sm font-black text-white">ERP Portal</p>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-white/60">NEV School</p>
+                        <p className="text-sm font-bold text-white">ERP Portal</p>
                     </div>
                 </div>
             </div>
@@ -310,7 +310,7 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
                         key={item.id}
                         type="button"
                         onClick={() => { setActiveTab(item.id); setDrawerOpen(false) }}
-                        className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-black transition-all ${
+                        className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-sm font-semibold transition-all ${
                             activeTab === item.id
                                 ? 'bg-white/15 text-white'
                                 : 'text-white/60 hover:bg-white/10 hover:text-white'
@@ -329,14 +329,14 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
                         <User size={14} />
                     </div>
                     <div className="min-w-0">
-                        <p className="truncate text-sm font-black text-white">{user?.full_name}</p>
-                        <p className="text-xs font-bold capitalize text-white/50">{user?.role}</p>
+                        <p className="truncate text-sm font-semibold text-white">{user?.full_name}</p>
+                        <p className="text-xs font-medium capitalize text-white/50">{user?.role}</p>
                     </div>
                 </div>
                 <button
                     type="button"
                     onClick={logout}
-                    className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                    className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white/60 transition-all hover:bg-white/10 hover:text-white"
                 >
                     <LogOut size={15} />
                     Logout
@@ -622,11 +622,11 @@ const ERPPortal = () => {
                 </button>
                 <div className="flex items-center gap-2">
                     <School size={16} className="text-brand-navy-700" />
-                    <span className="text-sm font-black text-slate-900">{currentPageLabel}</span>
+                    <span className="text-sm font-semibold text-slate-900">{currentPageLabel}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <NotificationCenter apiRequest={apiRequest} />
-                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-navy-100 text-xs font-black text-brand-navy-700">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-navy-100 text-xs font-bold text-brand-navy-700">
                         {user?.full_name?.[0] || '?'}
                     </div>
                 </div>
