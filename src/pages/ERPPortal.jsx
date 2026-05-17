@@ -277,7 +277,6 @@ const guardianNav = [
     { id: 'messages', label: 'Messages', icon: <Bell size={18} /> },
 ]
 
-const BOTTOM_NAV_COUNT = 5
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
@@ -371,9 +370,11 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
 
 // ── Mobile Bottom Tabs ────────────────────────────────────────────────────────
 
-const BottomTabs = ({ user, activeTab, setActiveTab, keyboardOffset }) => {
+const BottomTabs = ({ user, activeTab, setActiveTab, setDrawerOpen, keyboardOffset }) => {
     const navItems = user?.role === 'teacher' ? teacherNav : user?.role === 'guardian' ? guardianNav : studentNav
-    const primaryItems = navItems.slice(0, BOTTOM_NAV_COUNT)
+    const primaryItems = navItems.slice(0, 4)
+    const hasOverflow = navItems.length > 4
+    const overflowActive = hasOverflow && primaryItems.every((item) => item.id !== activeTab)
 
     return (
         <nav
@@ -390,18 +391,34 @@ const BottomTabs = ({ user, activeTab, setActiveTab, keyboardOffset }) => {
                         type="button"
                         onClick={() => setActiveTab(item.id)}
                         style={{ touchAction: 'manipulation', userSelect: 'none' }}
-                        className={`flex flex-1 flex-col items-center justify-center gap-1 py-2.5 text-[10px] font-black uppercase tracking-wider transition-colors ${
+                        className={`flex flex-1 flex-col items-center justify-center gap-1 min-h-[48px] py-2 text-[10px] font-medium transition-colors ${
                             activeTab === item.id
                                 ? 'text-brand-navy-700'
-                                : 'text-slate-400 hover:text-slate-700'
+                                : 'text-slate-400'
                         }`}
                     >
-                        <span className={`${activeTab === item.id ? 'text-brand-navy-700' : 'text-slate-400'}`}>
+                        <span className={activeTab === item.id ? 'text-brand-navy-700' : 'text-slate-400'}>
                             {item.icon}
                         </span>
                         {item.label}
                     </button>
                 ))}
+                {hasOverflow && (
+                    <button
+                        type="button"
+                        onClick={() => setDrawerOpen(true)}
+                        style={{ touchAction: 'manipulation', userSelect: 'none' }}
+                        className={`relative flex flex-1 flex-col items-center justify-center gap-1 min-h-[48px] py-2 text-[10px] font-medium transition-colors ${
+                            overflowActive ? 'text-brand-navy-700' : 'text-slate-400'
+                        }`}
+                    >
+                        <Menu size={18} />
+                        More
+                        {overflowActive && (
+                            <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-brand-navy-600" />
+                        )}
+                    </button>
+                )}
             </div>
         </nav>
     )
@@ -660,7 +677,7 @@ const ERPPortal = () => {
                 </div>
             </main>
 
-            <BottomTabs user={user} activeTab={activeTab} setActiveTab={setActiveTab} keyboardOffset={keyboardOffset} />
+            <BottomTabs user={user} activeTab={activeTab} setActiveTab={setActiveTab} setDrawerOpen={setDrawerOpen} keyboardOffset={keyboardOffset} />
 
             {receiptData && <ReceiptModal receiptData={receiptData} onClose={() => setReceiptData(null)} />}
         </div>
