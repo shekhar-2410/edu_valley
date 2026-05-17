@@ -691,7 +691,7 @@ def erp_login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
     return {"access_token": token, "token_type": "bearer", "user": user}
 
 def update_model_from_schema(obj, payload):
-    for key, value in payload.dict().items():
+    for key, value in payload.model_dump().items():
         setattr(obj, key, value)
     return obj
 
