@@ -725,9 +725,9 @@ def login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
     except HTTPException:
         raise
     except Exception as e:
-        import traceback
-        error_msg = traceback.format_exc()
-        raise HTTPException(status_code=500, detail=str(error_msg))
+        import logging
+        logging.exception("Login error")
+        raise HTTPException(status_code=500, detail="Login failed")
 
 @app.post("/erp/auth/login", response_model=schemas.ErpLoginResponse)
 @app.post("/api/erp/auth/login", response_model=schemas.ErpLoginResponse)
