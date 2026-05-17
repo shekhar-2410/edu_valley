@@ -1,24 +1,27 @@
+import { lazy, Suspense, useEffect, useState } from 'react'
+import { Moon, Sun } from 'lucide-react'
 import { Navigate, Route, BrowserRouter as Router, Routes, useLocation } from 'react-router-dom'
 import Footer from './components/Footer'
 import Navbar from './components/Navbar'
-import About from './pages/About'
-import Academics from './pages/Academics'
-import Admin from './pages/Admin'
-import AdminLogin from './pages/AdminLogin'
-import Admissions from './pages/Admissions'
-import Contact from './pages/Contact'
-import Events from './pages/Events'
-import ERPLogin from './pages/ERPLogin'
-import ERPPortal from './pages/ERPPortal'
-import Faculty from './pages/Faculty'
-import Gallery from './pages/Gallery'
-import Home from './pages/Home'
-import Resources from './pages/Resources'
-import NotFound from './pages/NotFound'
 import ScrollToTop from './components/ui/ScrollToTop'
 import ScrollToTopReset from './components/ui/ScrollToTopReset'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+
+const About = lazy(() => import('./pages/About'))
+const Academics = lazy(() => import('./pages/Academics'))
+const Admin = lazy(() => import('./pages/Admin'))
+const AdminLogin = lazy(() => import('./pages/AdminLogin'))
+const Admissions = lazy(() => import('./pages/Admissions'))
+const Contact = lazy(() => import('./pages/Contact'))
+const Events = lazy(() => import('./pages/Events'))
+const ERPLogin = lazy(() => import('./pages/ERPLogin'))
+const ERPPortal = lazy(() => import('./pages/ERPPortal'))
+const Faculty = lazy(() => import('./pages/Faculty'))
+const Gallery = lazy(() => import('./pages/Gallery'))
+const Home = lazy(() => import('./pages/Home'))
+const Resources = lazy(() => import('./pages/Resources'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -31,48 +34,78 @@ const ProtectedERPRoute = ({ children }) => {
   return isAuthenticated ? children : <Navigate to="/erp-login" replace />
 }
 
+const RouteFallback = () => (
+  <div className="flex min-h-[60vh] items-center justify-center bg-slate-50">
+    <div className="skeleton h-32 w-full max-w-xl rounded-3xl" />
+  </div>
+)
+
+const ThemeToggle = () => {
+  const [theme, setTheme] = useState(() => localStorage.getItem('theme') || 'light')
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark')
+    localStorage.setItem('theme', theme)
+  }, [theme])
+
+  return (
+    <button
+      type="button"
+      onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')}
+      className="fixed bottom-6 left-6 z-[60] flex h-11 w-11 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 shadow-xl transition-all hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
+      aria-label="Toggle dark mode"
+    >
+      {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
+    </button>
+  )
+}
+
 function AppContent() {
   const location = useLocation()
   const isErpRoute = location.pathname === '/erp' || location.pathname === '/erp-login'
+  const isAdminRoute = location.pathname.startsWith('/admin') || location.pathname === '/admin-login'
+  const isAppRoute = isErpRoute || isAdminRoute
 
   return (
-    <div className={`flex flex-col min-h-screen font-body overflow-x-hidden ${isErpRoute ? 'bg-slate-50' : 'bg-brand-cream'}`}>
-      {!isErpRoute && <Navbar />}
+    <div className={`flex flex-col min-h-screen font-body overflow-x-hidden ${isAppRoute ? 'bg-slate-50' : 'bg-brand-cream'}`}>
+      {!isAppRoute && <Navbar />}
       <main className="flex-grow">
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/academics" element={<Academics />} />
-          <Route path="/admissions" element={<Admissions />} />
-          <Route path="/faculty" element={<Faculty />} />
-          <Route path="/events" element={<Events />} />
-          <Route path="/gallery" element={<Gallery />} />
-          <Route path="/resources" element={<Resources />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route path="/erp-login" element={<ERPLogin />} />
-          <Route
-            path="/erp"
-            element={
-              <ProtectedERPRoute>
-                <ERPPortal />
-              </ProtectedERPRoute>
-            }
-          />
-          <Route path="*" element={<NotFound />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute>
-                <Admin />
-              </ProtectedRoute>
-            }
-          />
-        </Routes>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/academics" element={<Academics />} />
+            <Route path="/admissions" element={<Admissions />} />
+            <Route path="/faculty" element={<Faculty />} />
+            <Route path="/events" element={<Events />} />
+            <Route path="/gallery" element={<Gallery />} />
+            <Route path="/resources" element={<Resources />} />
+            <Route path="/contact" element={<Contact />} />
+            <Route path="/admin-login" element={<AdminLogin />} />
+            <Route path="/erp-login" element={<ERPLogin />} />
+            <Route
+              path="/erp"
+              element={
+                <ProtectedERPRoute>
+                  <ERPPortal />
+                </ProtectedERPRoute>
+              }
+            />
+            <Route
+              path="/admin/*"
+              element={
+                <ProtectedRoute>
+                  <Admin />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
-      {!isErpRoute && <Footer />}
-      {!isErpRoute && <ScrollToTop />}
-      {!isErpRoute && (
+      {!isAppRoute && <Footer />}
+      {!isAppRoute && <ScrollToTop />}
+      {!isAppRoute && (
         <a
           href="https://wa.me/917050421421?text=Hello%2C%20I%20want%20to%20enquire%20about%20admissions"
           target="_blank"
@@ -98,6 +131,7 @@ function AppContent() {
         pauseOnHover
         theme="light"
       />
+      {!isAppRoute && <ThemeToggle />}
     </div>
   )
 }
