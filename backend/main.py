@@ -1472,6 +1472,25 @@ def admin_upsert_timetable(
 def get_erp_me(user: models.ErpUser = Depends(get_current_erp_user)):
     return user
 
+
+@app.post("/erp/me/change-password")
+@app.post("/api/erp/me/change-password")
+def change_my_password(
+    payload: schemas.PasswordChangeRequest,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if not verify_password(payload.current_password, user.hashed_password):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    if payload.current_password == payload.new_password:
+        raise HTTPException(status_code=400, detail="New password must be different from current password")
+    user.hashed_password = pwd_context.hash(payload.new_password)
+    db.commit()
+    create_audit_log(db, "erp", user.email, "change_password", "erp_user", user.id)
+    db.commit()
+    return {"status": "ok"}
+
+
 @app.get("/erp/student/dashboard", response_model=schemas.StudentDashboard)
 @app.get("/api/erp/student/dashboard", response_model=schemas.StudentDashboard)
 def get_student_dashboard(

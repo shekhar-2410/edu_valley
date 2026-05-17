@@ -20,6 +20,7 @@ class EventCreate(EventBase):
 class Event(EventBase):
     id: int
     created_at: datetime
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -43,6 +44,7 @@ class FacultyCreate(FacultyBase):
 class Faculty(FacultyBase):
     id: int
     created_at: datetime
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -63,6 +65,7 @@ class GalleryImageCreate(GalleryImageBase):
 class GalleryImage(GalleryImageBase):
     id: int
     created_at: datetime
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -83,10 +86,17 @@ class ContactCreate(ContactBase):
 
 class Contact(ContactBase):
     id: int
+    status: str = "new"
+    read: bool = False
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+
+class ContactUpdate(BaseModel):
+    status: Optional[str] = Field(None, pattern="^(new|responded|archived)$")
+    read: Optional[bool] = None
 
 
 # Announcement Schemas
@@ -103,6 +113,7 @@ class AnnouncementCreate(AnnouncementBase):
 class Announcement(AnnouncementBase):
     id: int
     created_at: datetime
+    deleted_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -130,6 +141,34 @@ class ErpUserPublic(BaseModel):
     full_name: str
     role: str
     phone: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationOut(BaseModel):
+    id: int
+    title: str
+    body: Optional[str] = None
+    type: str
+    link: Optional[str] = None
+    read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditLogOut(BaseModel):
+    id: int
+    actor_kind: str
+    actor_email: Optional[str] = None
+    action: str
+    entity_type: str
+    entity_id: Optional[str] = None
+    before_json: Optional[str] = None
+    after_json: Optional[str] = None
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -294,6 +333,22 @@ class StudentDashboard(BaseModel):
     stats: Dict[str, Any]
 
 
+class GuardianChildSummary(BaseModel):
+    user: ErpUserPublic
+    profile: StudentProfileOut
+    fee_due_paise: int
+    attendance_percent: float
+    latest_average_percent: float
+    pending_leaves: int
+    unread_threads: int = 0
+
+
+class GuardianDashboard(BaseModel):
+    user: ErpUserPublic
+    children: List[GuardianChildSummary]
+    stats: Dict[str, Any]
+
+
 class TeacherDashboard(BaseModel):
     user: ErpUserPublic
     profile: TeacherProfileOut
@@ -301,6 +356,64 @@ class TeacherDashboard(BaseModel):
     leaves: List[LeaveRequestOut]
     marks: List[MarkEntryOut]
     stats: Dict[str, Any]
+
+
+class MessageCreateThread(BaseModel):
+    student_id: int
+    subject: str = Field(..., min_length=2, max_length=160)
+    body: str = Field(..., min_length=1, max_length=5000)
+
+
+class MessageCreate(BaseModel):
+    body: str = Field(..., min_length=1, max_length=5000)
+
+
+class MessageOut(BaseModel):
+    id: int
+    thread_id: int
+    sender_user_id: int
+    sender_role: str
+    body: str
+    created_at: datetime
+    sender_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class MessageThreadOut(BaseModel):
+    id: int
+    student_id: int
+    teacher_id: Optional[int] = None
+    guardian_user_id: Optional[int] = None
+    subject: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    student: Optional[StudentSummary] = None
+    messages: List[MessageOut] = []
+
+    class Config:
+        from_attributes = True
+
+
+class SubstitutionSlotOut(BaseModel):
+    slot_id: int
+    day_of_week: int
+    period_no: int
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    class_label: str
+    subject: Optional[str] = None
+    teacher_id: Optional[int] = None
+    teacher_name: Optional[str] = None
+    candidate_teachers: List[Dict[str, Any]] = []
+
+
+class SubstitutionDashboard(BaseModel):
+    day_of_week: int
+    teacher_workload: List[Dict[str, Any]]
+    cover_slots: List[SubstitutionSlotOut]
 
 
 class RazorpayOrderRequest(BaseModel):
@@ -529,3 +642,8 @@ class TimetableSlotInput(BaseModel):
 class TimetableUpsert(BaseModel):
     academic_year: str = Field(..., max_length=10)
     slots: List[TimetableSlotInput]
+
+
+class PasswordChangeRequest(BaseModel):
+    current_password: str = Field(..., min_length=1)
+    new_password: str = Field(..., min_length=8, max_length=128)
