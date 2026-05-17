@@ -1204,16 +1204,21 @@ def admin_create_subject(payload: schemas.AdminCreateSubject, admin=Depends(get_
 @app.get("/admin/erp/fees/summary")
 @app.get("/api/admin/erp/fees/summary")
 def admin_fee_summary(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    invoices = db.query(models.FeeInvoice).all()
-    payments = db.query(models.FeePayment).filter(models.FeePayment.status == "paid").all()
-    total_billed = sum(i.amount_paise for i in invoices)
-    total_collected = sum(p.amount_paise for p in payments)
+    from sqlalchemy import func as sqlfunc
+    total_billed, invoice_count = db.query(
+        sqlfunc.coalesce(sqlfunc.sum(models.FeeInvoice.amount_paise), 0),
+        sqlfunc.count(models.FeeInvoice.id),
+    ).first()
+    total_collected, payment_count = db.query(
+        sqlfunc.coalesce(sqlfunc.sum(models.FeePayment.amount_paise), 0),
+        sqlfunc.count(models.FeePayment.id),
+    ).filter(models.FeePayment.status == "paid").first()
     return {
-        "total_billed_paise": total_billed,
-        "total_collected_paise": total_collected,
-        "outstanding_paise": max(0, total_billed - total_collected),
-        "invoice_count": len(invoices),
-        "payment_count": len(payments),
+        "total_billed_paise": int(total_billed),
+        "total_collected_paise": int(total_collected),
+        "outstanding_paise": max(0, int(total_billed) - int(total_collected)),
+        "invoice_count": invoice_count,
+        "payment_count": payment_count,
     }
 
 
