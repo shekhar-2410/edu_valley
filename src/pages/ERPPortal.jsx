@@ -8,12 +8,16 @@ import {
     ChevronRight,
     ChevronUp,
     ClipboardList,
+    Clock,
     CreditCard,
     GraduationCap,
     Home,
     Loader2,
     LogOut,
+    MapPin,
     Menu,
+    MessageSquare,
+    Pencil,
     Phone,
     Plus,
     Printer,
@@ -73,7 +77,7 @@ const statusStyles = {
 // ── Shared Components ────────────────────────────────────────────────────────
 
 const StatusBadge = ({ status }) => (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-black uppercase tracking-wider ${statusStyles[status] || 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-semibold capitalize ${statusStyles[status] || 'border-slate-200 bg-slate-50 text-slate-600'}`}>
         {status}
     </span>
 )
@@ -91,8 +95,8 @@ const StatTile = ({ label, value, icon, tone = 'navy', sub }) => {
             <div className="mb-4 flex items-center justify-between">
                 <span className={`flex h-10 w-10 items-center justify-center rounded-xl ${tones[tone]}`}>{icon}</span>
             </div>
-            <p className="text-2xl font-black tracking-tight text-slate-950">{value}</p>
-            <p className="mt-0.5 text-xs font-black uppercase tracking-[0.2em] text-slate-400">{label}</p>
+            <p className="font-display text-2xl font-bold text-slate-900">{value}</p>
+            <p className="mt-0.5 text-xs font-medium text-slate-500">{label}</p>
             {sub && <p className="mt-1 text-xs font-medium text-slate-400">{sub}</p>}
         </div>
     )
@@ -105,16 +109,122 @@ const EmptyState = ({ title, icon }) => (
     </div>
 )
 
+const PortalSkeleton = () => (
+    <div className="min-h-screen bg-slate-50 lg:pl-64">
+        <div className="hidden lg:fixed lg:inset-y-0 lg:left-0 lg:block lg:w-64 lg:bg-brand-navy-700 lg:p-6">
+            <div className="skeleton-dark h-10 w-36 rounded-xl" />
+            <div className="mt-10 space-y-3">
+                {[1, 2, 3, 4, 5].map((item) => <div key={item} className="skeleton-dark h-11 rounded-xl" />)}
+            </div>
+        </div>
+        <main className="mx-auto max-w-7xl space-y-6 p-4 pt-8 sm:p-6 lg:p-8">
+            <div className="skeleton h-9 w-48 rounded-xl" />
+            <div className="grid gap-4 md:grid-cols-4">
+                {[1, 2, 3, 4].map((item) => <div key={item} className="skeleton h-32 rounded-2xl" />)}
+            </div>
+            <div className="grid gap-4 lg:grid-cols-2">
+                <div className="skeleton h-80 rounded-2xl" />
+                <div className="skeleton h-80 rounded-2xl" />
+            </div>
+        </main>
+    </div>
+)
+
+const PanelSkeleton = ({ cards = 3 }) => (
+    <div className="space-y-6">
+        <div className="skeleton h-9 w-52 rounded-xl" />
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+            {Array.from({ length: cards }).map((_, index) => <div key={index} className="skeleton h-44 rounded-2xl" />)}
+        </div>
+    </div>
+)
+
+const NotificationCenter = ({ apiRequest }) => {
+    const [open, setOpen] = useState(false)
+    const [items, setItems] = useState([])
+
+    const load = async () => {
+        try {
+            const data = await apiRequest(API_ENDPOINTS.erpNotifications)
+            setItems(data)
+        } catch {
+            setItems([])
+        }
+    }
+
+    useEffect(() => { load() }, []) // eslint-disable-line
+
+    const unread = items.filter((item) => !item.read)
+
+    const markRead = async (item) => {
+        if (!item.read) {
+            const updated = await apiRequest(`${API_ENDPOINTS.erpNotifications}/${item.id}/read`, { method: 'PATCH' })
+            setItems((current) => current.map((row) => row.id === item.id ? updated : row))
+        }
+        if (window.Notification && Notification.permission === 'default') {
+            Notification.requestPermission().catch(() => {})
+        }
+    }
+
+    useEffect(() => {
+        if (!window.Notification || Notification.permission !== 'granted') return
+        const latest = unread[0]
+        if (!latest) return
+        const seenKey = `notified-${latest.id}`
+        if (sessionStorage.getItem(seenKey)) return
+        sessionStorage.setItem(seenKey, '1')
+        new Notification(latest.title, { body: latest.body || 'Narendra Edu Valley ERP' })
+    }, [unread])
+
+    return (
+        <div className="relative">
+            <button
+                type="button"
+                onClick={() => setOpen((value) => !value)}
+                className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                aria-label="Notifications"
+            >
+                <Bell size={17} />
+                {unread.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-crimson-600 px-1 text-[10px] font-bold text-white">{unread.length}</span>}
+            </button>
+            {open && (
+                <div className="absolute right-0 top-11 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                        <p className="font-bold text-slate-950">Notifications</p>
+                        <button type="button" onClick={load} className="text-xs font-semibold text-brand-navy-600">Refresh</button>
+                    </div>
+                    <div className="max-h-96 overflow-y-auto">
+                        {items.length === 0 ? (
+                            <div className="p-6 text-center text-sm font-medium text-slate-500">No notifications yet.</div>
+                        ) : items.map((item) => (
+                            <button
+                                key={item.id}
+                                type="button"
+                                onClick={() => markRead(item)}
+                                className={`block w-full border-b border-slate-100 px-4 py-3 text-left last:border-0 ${item.read ? 'bg-white' : 'bg-brand-navy-50'}`}
+                            >
+                                <p className="text-sm font-bold text-slate-950">{item.title}</p>
+                                {item.body && <p className="mt-1 text-xs leading-5 text-slate-500">{item.body}</p>}
+                                <p className="mt-1 font-mono text-[11px] text-slate-400">{formatDate(item.created_at)}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 const Info = ({ label, value }) => (
     <div className="rounded-xl bg-slate-50 px-4 py-3">
-        <p className="text-xs font-black uppercase tracking-wider text-slate-400">{label}</p>
-        <p className="mt-1 font-black text-slate-900">{value || '—'}</p>
+        <p className="text-xs font-medium text-slate-500">{label}</p>
+        <p className="mt-1 font-semibold text-slate-900">{value || '—'}</p>
     </div>
 )
 
 const Field = ({ label, value, onChange, type = 'text', required = false, children }) => (
     <div>
-        <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-400">{label}</label>
+        <label className="mb-1.5 block text-xs font-medium text-slate-600">{label}</label>
         {children || (
             <input
                 type={type}
@@ -155,6 +265,13 @@ const teacherNav = [
     { id: 'leaves', label: 'Leaves', icon: <Bell size={18} /> },
     { id: 'marks', label: 'Marks', icon: <BookOpen size={18} /> },
     { id: 'analytics', label: 'Analytics', icon: <BarChart2 size={18} /> },
+    { id: 'messages', label: 'Messages', icon: <MessageSquare size={18} /> },
+    { id: 'substitutions', label: 'Subs', icon: <School size={18} /> },
+]
+
+const guardianNav = [
+    { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
+    { id: 'messages', label: 'Messages', icon: <Bell size={18} /> },
 ]
 
 const BOTTOM_NAV_COUNT = 5
@@ -162,7 +279,7 @@ const BOTTOM_NAV_COUNT = 5
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
 const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerOpen }) => {
-    const navItems = user?.role === 'teacher' ? teacherNav : studentNav
+    const navItems = user?.role === 'teacher' ? teacherNav : user?.role === 'guardian' ? guardianNav : studentNav
     const drawerRef = useRef(null)
 
     useEffect(() => {
@@ -252,7 +369,7 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
 // ── Mobile Bottom Tabs ────────────────────────────────────────────────────────
 
 const BottomTabs = ({ user, activeTab, setActiveTab, keyboardOffset }) => {
-    const navItems = user?.role === 'teacher' ? teacherNav : studentNav
+    const navItems = user?.role === 'teacher' ? teacherNav : user?.role === 'guardian' ? guardianNav : studentNav
     const primaryItems = navItems.slice(0, BOTTOM_NAV_COUNT)
 
     return (
@@ -300,6 +417,7 @@ const ERPPortal = () => {
     const [drawerOpen, setDrawerOpen] = useState(false)
     const [receiptData, setReceiptData] = useState(null)
     const [receiptLoadingId, setReceiptLoadingId] = useState(null)
+    const [shareLoadingId, setShareLoadingId] = useState(null)
     const [busyId, setBusyId] = useState(null)
     const [keyboardOffset, setKeyboardOffset] = useState('0px')
 
@@ -334,7 +452,11 @@ const ERPPortal = () => {
         setLoading(true)
         try {
             const savedUser = JSON.parse(localStorage.getItem('erpUser') || 'null')
-            const endpoint = savedUser?.role === 'teacher' ? API_ENDPOINTS.erpTeacherDashboard : API_ENDPOINTS.erpStudentDashboard
+            const endpoint = savedUser?.role === 'teacher'
+                ? API_ENDPOINTS.erpTeacherDashboard
+                : savedUser?.role === 'guardian'
+                    ? API_ENDPOINTS.erpGuardianDashboard
+                    : API_ENDPOINTS.erpStudentDashboard
             const data = await apiRequest(endpoint)
             setDashboard(data)
             setUser(data.user)
@@ -406,6 +528,18 @@ const ERPPortal = () => {
         }
     }
 
+    const sharePaymentReceipt = async (payment) => {
+        setShareLoadingId(payment.id)
+        try {
+            const data = await apiRequest(`${API_ENDPOINTS.erpReceipts}/${payment.id}`)
+            shareReceiptWhatsApp(data)
+        } catch (err) {
+            toast.error(err.message || 'Could not load receipt')
+        } finally {
+            setShareLoadingId(null)
+        }
+    }
+
     const createLeave = async (payload) => {
         await apiRequest(API_ENDPOINTS.erpLeaves, { method: 'POST', body: JSON.stringify(payload) })
         toast.success('Leave request submitted')
@@ -428,10 +562,11 @@ const ERPPortal = () => {
         }
     }
 
-    const createMark = async (payload) => {
+    const createMark = async (payload, options = {}) => {
+        const { notify = true, refresh = true } = options
         await apiRequest(API_ENDPOINTS.erpMarks, { method: 'POST', body: JSON.stringify(payload) })
-        toast.success('Marks saved')
-        fetchDashboard()
+        if (notify) toast.success('Marks saved')
+        if (refresh) fetchDashboard()
     }
 
     const studentMap = useMemo(() => {
@@ -441,14 +576,7 @@ const ERPPortal = () => {
     }, [dashboard])
 
     if (!token || loading) {
-        return (
-            <div className="flex min-h-screen items-center justify-center bg-slate-50">
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-6 py-4 font-black text-slate-600 shadow-sm">
-                    <Loader2 className="animate-spin" size={20} />
-                    Loading ERP
-                </div>
-            </div>
-        )
+        return <PortalSkeleton />
     }
 
     if (!dashboard) return (
@@ -457,7 +585,8 @@ const ERPPortal = () => {
         </div>
     )
 
-    const currentPageLabel = (user?.role === 'teacher' ? teacherNav : studentNav).find((n) => n.id === activeTab)?.label || 'Dashboard'
+    const navItems = user?.role === 'teacher' ? teacherNav : user?.role === 'guardian' ? guardianNav : studentNav
+    const currentPageLabel = navItems.find((n) => n.id === activeTab)?.label || 'Dashboard'
 
     return (
         <div className="min-h-[100dvh] bg-slate-50 lg:pl-64">
@@ -475,8 +604,11 @@ const ERPPortal = () => {
                     <School size={16} className="text-brand-navy-700" />
                     <span className="text-sm font-black text-slate-900">{currentPageLabel}</span>
                 </div>
-                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-navy-100 text-xs font-black text-brand-navy-700">
-                    {user?.full_name?.[0] || '?'}
+                <div className="flex items-center gap-2">
+                    <NotificationCenter apiRequest={apiRequest} />
+                    <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-navy-100 text-xs font-black text-brand-navy-700">
+                        {user?.full_name?.[0] || '?'}
+                    </div>
                 </div>
             </header>
 
@@ -489,6 +621,10 @@ const ERPPortal = () => {
                 setDrawerOpen={setDrawerOpen}
             />
 
+            <div className="fixed right-6 top-5 z-30 hidden lg:block">
+                <NotificationCenter apiRequest={apiRequest} />
+            </div>
+
             {/* Main content */}
             <main className="min-h-[100dvh] pb-24 lg:pb-10">
                 <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
@@ -498,15 +634,22 @@ const ERPPortal = () => {
                             {activeTab === 'attendance' && <TeacherAttendance apiRequest={apiRequest} dashboard={dashboard} />}
                             {activeTab === 'students' && <TeacherStudents dashboard={dashboard} studentMap={studentMap} apiRequest={apiRequest} />}
                             {activeTab === 'leaves' && <TeacherLeaves dashboard={dashboard} updateLeave={updateLeave} busyId={busyId} studentMap={studentMap} />}
-                            {activeTab === 'marks' && <TeacherMarks dashboard={dashboard} createMark={createMark} studentMap={studentMap} />}
+                            {activeTab === 'marks' && <TeacherMarks dashboard={dashboard} createMark={createMark} studentMap={studentMap} refreshDashboard={fetchDashboard} />}
                             {activeTab === 'analytics' && <TeacherAnalytics apiRequest={apiRequest} dashboard={dashboard} />}
+                            {activeTab === 'messages' && <MessagesView apiRequest={apiRequest} user={user} students={dashboard.students || []} />}
+                            {activeTab === 'substitutions' && <SubstitutionsView apiRequest={apiRequest} />}
+                        </>
+                    ) : user?.role === 'guardian' ? (
+                        <>
+                            {activeTab === 'dashboard' && <GuardianDashboardView dashboard={dashboard} setActiveTab={setActiveTab} />}
+                            {activeTab === 'messages' && <MessagesView apiRequest={apiRequest} user={user} students={dashboard.children || []} />}
                         </>
                     ) : (
                         <>
-                            {activeTab === 'dashboard' && <StudentDashboardView dashboard={dashboard} />}
+                            {activeTab === 'dashboard' && <StudentDashboardView dashboard={dashboard} setActiveTab={setActiveTab} />}
                             {activeTab === 'attendance' && <StudentAttendance dashboard={dashboard} />}
                             {activeTab === 'marks' && <StudentMarks dashboard={dashboard} />}
-                            {activeTab === 'fees' && <FeesPanel dashboard={dashboard} handlePay={handlePay} openReceipt={openReceipt} busyId={busyId} receiptLoadingId={receiptLoadingId} />}
+                            {activeTab === 'fees' && <FeesPanel dashboard={dashboard} handlePay={handlePay} openReceipt={openReceipt} sharePaymentReceipt={sharePaymentReceipt} busyId={busyId} receiptLoadingId={receiptLoadingId} shareLoadingId={shareLoadingId} />}
                             {activeTab === 'timetable' && <StudentTimetable apiRequest={apiRequest} dashboard={dashboard} />}
                             {activeTab === 'exams' && <StudentExams apiRequest={apiRequest} dashboard={dashboard} />}
                         </>
@@ -523,59 +666,519 @@ const ERPPortal = () => {
 
 // ── Student Views ─────────────────────────────────────────────────────────────
 
-const StudentDashboardView = ({ dashboard }) => {
-    const pendingInvoices = dashboard.invoices.filter((inv) => inv.status !== 'paid')
+const MiniSparkline = ({ values, color = '#1B3A6B' }) => {
+    const safeValues = values.length > 1 ? values : [0.2, 0.45, 0.35, 0.7, 0.55, 0.82]
+    const max = Math.max(...safeValues, 1)
+    const min = Math.min(...safeValues, 0)
+    const range = max - min || 1
+    const points = safeValues.map((value, index) => {
+        const x = safeValues.length === 1 ? 50 : (index / (safeValues.length - 1)) * 100
+        const y = 34 - ((value - min) / range) * 28
+        return `${x},${y}`
+    }).join(' ')
+
+    return (
+        <svg viewBox="0 0 100 38" className="h-10 w-full" role="img" aria-label="Trend">
+            <polyline points={points} fill="none" stroke={color} strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    )
+}
+
+const ProfileDrawer = ({ dashboard, onClose }) => {
+    useEffect(() => {
+        const handleKey = (event) => { if (event.key === 'Escape') onClose() }
+        document.addEventListener('keydown', handleKey)
+        return () => document.removeEventListener('keydown', handleKey)
+    }, [onClose])
+
+    return (
+        <div className="fixed inset-0 z-[2000]">
+            <div className="absolute inset-0 bg-slate-950/50 backdrop-blur-sm" onClick={onClose} />
+            <aside className="absolute right-0 top-0 flex h-full w-full max-w-md flex-col bg-white shadow-2xl">
+                <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-600">Student profile</p>
+                        <h2 className="mt-1 font-display text-2xl font-bold text-slate-950">{dashboard.user.full_name}</h2>
+                    </div>
+                    <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-700" aria-label="Close profile">
+                        <X size={20} />
+                    </button>
+                </div>
+                <div className="flex-1 overflow-y-auto p-6">
+                    <div className="grid gap-3">
+                        <Info label="Admission No" value={dashboard.profile.admission_no} />
+                        <Info label="Class" value={`${dashboard.profile.class_name}-${dashboard.profile.section}`} />
+                        <Info label="Roll No" value={dashboard.profile.roll_no} />
+                        <Info label="Blood Group" value={dashboard.profile.blood_group} />
+                        <Info label="Date of Birth" value={formatDate(dashboard.profile.date_of_birth)} />
+                        <Info label="Guardian" value={dashboard.profile.guardian_name} />
+                        <Info label="Guardian Phone" value={dashboard.profile.guardian_phone} />
+                        <Info label="Address" value={dashboard.profile.address} />
+                    </div>
+                </div>
+            </aside>
+        </div>
+    )
+}
+
+const GuardianDashboardView = ({ dashboard, setActiveTab }) => {
+    const [selectedId, setSelectedId] = useState(dashboard.children?.[0]?.profile?.id || null)
+    const selected = dashboard.children?.find((child) => child.profile.id === selectedId) || dashboard.children?.[0]
+
     return (
         <div className="space-y-6">
             <div>
-                <p className="text-xs font-black uppercase tracking-[0.2em] text-brand-navy-500">Welcome back</p>
-                <h1 className="text-2xl font-black tracking-tight text-slate-950 md:text-3xl">{dashboard.user.full_name}</h1>
-                <p className="text-sm font-medium text-slate-500">
-                    Class {dashboard.profile.class_name}-{dashboard.profile.section} · Roll {dashboard.profile.roll_no || '—'}
-                </p>
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Guardian Portal</p>
+                <h1 className="mt-1 font-display text-3xl font-black tracking-tight text-slate-950">{dashboard.user.full_name}</h1>
             </div>
-
-            <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
-                <StatTile label="Fee Due" value={money(dashboard.stats.fee_due_paise)} icon={<CreditCard size={19} />} tone="crimson" />
-                <StatTile label="Attendance" value={`${dashboard.stats.attendance_percent}%`} icon={<ClipboardList size={19} />} tone="navy" />
-                <StatTile label="Avg Marks" value={`${dashboard.stats.average_percent}%`} icon={<BookOpen size={19} />} tone="gold" />
-                <StatTile label="Receipts" value={dashboard.stats.receipt_count} icon={<Receipt size={19} />} tone="slate" />
+            <div className="grid gap-4 sm:grid-cols-3">
+                <StatTile label="Children" value={dashboard.stats.child_count} icon={<Users size={19} />} tone="navy" />
+                <StatTile label="Total Fee Due" value={money(dashboard.stats.fee_due_paise)} icon={<CreditCard size={19} />} tone={dashboard.stats.fee_due_paise > 0 ? 'crimson' : 'slate'} />
+                <StatTile label="Unread Alerts" value={dashboard.stats.notifications_unread || 0} icon={<Bell size={19} />} tone={dashboard.stats.notifications_unread > 0 ? 'gold' : 'slate'} />
             </div>
-
-            <div className="grid gap-6 xl:grid-cols-2">
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="mb-4 text-lg font-black text-slate-950">Student Details</h2>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                        <Info label="Admission No" value={dashboard.profile.admission_no} />
-                        <Info label="Class" value={`${dashboard.profile.class_name}-${dashboard.profile.section}`} />
-                        <Info label="Blood Group" value={dashboard.profile.blood_group} />
-                        <Info label="Guardian" value={dashboard.profile.guardian_name} />
+            {dashboard.children?.length === 0 ? (
+                <EmptyState title="No students linked to this guardian account yet" icon={<Users size={32} />} />
+            ) : (
+                <div className="grid gap-5 lg:grid-cols-[280px_1fr]">
+                    <div className="space-y-2">
+                        {dashboard.children.map((child) => (
+                            <button
+                                key={child.profile.id}
+                                type="button"
+                                onClick={() => setSelectedId(child.profile.id)}
+                                className={`w-full rounded-2xl border p-4 text-left ${selected?.profile.id === child.profile.id ? 'border-brand-navy-300 bg-brand-navy-50' : 'border-slate-200 bg-white hover:bg-slate-50'}`}
+                            >
+                                <p className="font-bold text-slate-950">{child.user.full_name}</p>
+                                <p className="text-xs font-medium text-slate-500">Class {child.profile.class_name}-{child.profile.section} · {child.profile.admission_no}</p>
+                            </button>
+                        ))}
                     </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="mb-4 text-lg font-black text-slate-950">Priority Items</h2>
-                    <div className="space-y-3">
-                        {pendingInvoices.length === 0 ? (
-                            <p className="rounded-xl bg-emerald-50 px-4 py-3 text-sm font-bold text-emerald-700">All fee invoices paid ✓</p>
-                        ) : pendingInvoices.map((inv) => (
-                            <div key={inv.id} className="flex items-center justify-between rounded-xl border border-slate-200 p-4">
+                    {selected && (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                                 <div>
-                                    <p className="font-black text-slate-900">{inv.title}</p>
-                                    <p className="text-xs text-slate-500">Due {formatDate(inv.due_date)}</p>
+                                    <h2 className="font-display text-2xl font-bold text-slate-950">{selected.user.full_name}</h2>
+                                    <p className="text-sm font-medium text-slate-500">Class {selected.profile.class_name}-{selected.profile.section} · Roll {selected.profile.roll_no || '—'}</p>
                                 </div>
-                                <p className="font-black text-brand-crimson-700">{money(getBalance(inv))}</p>
+                                <button type="button" onClick={() => setActiveTab('messages')} className="rounded-xl bg-brand-navy-700 px-4 py-2.5 text-sm font-semibold text-white">Message Teacher</button>
+                            </div>
+                            <div className="mt-6 grid gap-3 sm:grid-cols-4">
+                                <Info label="Attendance" value={`${selected.attendance_percent}%`} />
+                                <Info label="Avg Marks" value={`${selected.latest_average_percent}%`} />
+                                <Info label="Fee Due" value={money(selected.fee_due_paise)} />
+                                <Info label="Pending Leaves" value={selected.pending_leaves} />
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+const MessagesView = ({ apiRequest, user, students }) => {
+    const [threads, setThreads] = useState([])
+    const [selectedId, setSelectedId] = useState(null)
+    const [form, setForm] = useState({ student_id: students[0]?.profile?.id || '', subject: '', body: '' })
+    const [reply, setReply] = useState('')
+    const [sending, setSending] = useState(false)
+
+    const load = async () => {
+        const data = await apiRequest(API_ENDPOINTS.erpMessages)
+        setThreads(data)
+        if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+    }
+
+    useEffect(() => {
+        load().catch((error) => toast.error(error.message || 'Could not load messages'))
+    }, []) // eslint-disable-line
+
+    const selected = threads.find((thread) => thread.id === selectedId)
+
+    const createThread = async (event) => {
+        event.preventDefault()
+        setSending(true)
+        try {
+            const created = await apiRequest(API_ENDPOINTS.erpMessages, { method: 'POST', body: JSON.stringify({ ...form, student_id: Number(form.student_id) }) })
+            setThreads((current) => [created, ...current])
+            setSelectedId(created.id)
+            setForm({ student_id: form.student_id, subject: '', body: '' })
+        } catch (error) {
+            toast.error(error.message || 'Could not send message')
+        } finally {
+            setSending(false)
+        }
+    }
+
+    const sendReply = async (event) => {
+        event.preventDefault()
+        if (!selected || !reply.trim()) return
+        setSending(true)
+        try {
+            const updated = await apiRequest(`${API_ENDPOINTS.erpMessages}/${selected.id}`, { method: 'POST', body: JSON.stringify({ body: reply }) })
+            setThreads((current) => current.map((thread) => thread.id === updated.id ? updated : thread))
+            setReply('')
+        } catch (error) {
+            toast.error(error.message || 'Could not send reply')
+        } finally {
+            setSending(false)
+        }
+    }
+
+    return (
+        <div className="grid gap-6 lg:grid-cols-[360px_1fr]">
+            <div className="space-y-4">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-950">Messages</h1>
+                    <p className="text-sm font-medium text-slate-500">{user.role === 'guardian' ? 'Parent-teacher threads' : 'Guardian conversations'}</p>
+                </div>
+                <form onSubmit={createThread} className="space-y-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <select value={form.student_id} onChange={(event) => setForm({ ...form, student_id: event.target.value })} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold">
+                        {students.map((student) => <option key={student.profile.id} value={student.profile.id}>{student.user.full_name}</option>)}
+                    </select>
+                    <input value={form.subject} onChange={(event) => setForm({ ...form, subject: event.target.value })} placeholder="Subject" className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-semibold" required />
+                    <textarea value={form.body} onChange={(event) => setForm({ ...form, body: event.target.value })} placeholder="Message" rows={3} className="w-full resize-none rounded-xl border border-slate-200 px-3 py-2.5 text-sm" required />
+                    <button disabled={sending || !form.student_id} className="w-full rounded-xl bg-brand-navy-700 py-2.5 text-sm font-semibold text-white disabled:opacity-50">Start Thread</button>
+                </form>
+                <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                    {threads.length === 0 ? (
+                        <div className="p-6 text-center text-sm font-medium text-slate-500">No message threads yet.</div>
+                    ) : threads.map((thread) => (
+                        <button key={thread.id} type="button" onClick={() => setSelectedId(thread.id)} className={`block w-full border-b border-slate-100 p-4 text-left last:border-0 ${selectedId === thread.id ? 'bg-brand-navy-50' : 'hover:bg-slate-50'}`}>
+                            <p className="font-bold text-slate-950">{thread.subject}</p>
+                            <p className="text-xs font-medium text-slate-500">{thread.student?.user?.full_name || 'Student'} · {thread.messages.length} message{thread.messages.length === 1 ? '' : 's'}</p>
+                        </button>
+                    ))}
+                </div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                {!selected ? (
+                    <EmptyState title="Select a thread to read messages" icon={<Bell size={32} />} />
+                ) : (
+                    <div className="flex min-h-[520px] flex-col">
+                        <div className="border-b border-slate-200 px-5 py-4">
+                            <h2 className="font-bold text-slate-950">{selected.subject}</h2>
+                            <p className="text-xs font-medium text-slate-500">{selected.student?.user?.full_name}</p>
+                        </div>
+                        <div className="flex-1 space-y-3 overflow-y-auto p-5">
+                            {selected.messages.map((message) => {
+                                const mine = message.sender_user_id === user.id
+                                return (
+                                    <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+                                        <div className={`max-w-[78%] rounded-2xl px-4 py-3 ${mine ? 'bg-brand-navy-700 text-white' : 'bg-slate-100 text-slate-800'}`}>
+                                            <p className="text-sm leading-6">{message.body}</p>
+                                            <p className={`mt-1 text-[11px] ${mine ? 'text-white/60' : 'text-slate-400'}`}>{message.sender_name || message.sender_role} · {formatDate(message.created_at)}</p>
+                                        </div>
+                                    </div>
+                                )
+                            })}
+                        </div>
+                        <form onSubmit={sendReply} className="flex gap-3 border-t border-slate-200 p-4">
+                            <input value={reply} onChange={(event) => setReply(event.target.value)} placeholder="Write a reply..." className="min-w-0 flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-brand-navy-500" />
+                            <button disabled={sending || !reply.trim()} className="rounded-xl bg-brand-navy-700 px-5 text-sm font-semibold text-white disabled:opacity-50">Send</button>
+                        </form>
+                    </div>
+                )}
+            </div>
+        </div>
+    )
+}
+
+const SubstitutionsView = ({ apiRequest }) => {
+    const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    const [day, setDay] = useState(Math.min((new Date().getDay() + 6) % 7, 5))
+    const [data, setData] = useState(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+        setLoading(true)
+        apiRequest(`${API_ENDPOINTS.erpSubstitutions}?day_of_week=${day}`)
+            .then(setData)
+            .catch((error) => toast.error(error.message || 'Could not load substitutions'))
+            .finally(() => setLoading(false))
+    }, [day]) // eslint-disable-line
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h1 className="text-2xl font-black text-slate-950">Substitution Planner</h1>
+                    <p className="text-sm font-medium text-slate-500">Find free teachers by period and compare workload.</p>
+                </div>
+                <div className="flex gap-2 overflow-x-auto">
+                    {DAYS.map((label, index) => (
+                        <button key={label} type="button" onClick={() => setDay(index)} className={`rounded-xl border px-4 py-2 text-sm font-semibold ${day === index ? 'border-brand-navy-600 bg-brand-navy-600 text-white' : 'border-slate-200 bg-white text-slate-600'}`}>{label}</button>
+                    ))}
+                </div>
+            </div>
+            {loading ? <PanelSkeleton cards={4} /> : (
+                <div className="grid gap-6 xl:grid-cols-[1fr_340px]">
+                    <div className="space-y-3">
+                        {(data?.cover_slots || []).map((slot) => (
+                            <div key={slot.slot_id} className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+                                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                                    <div>
+                                        <p className="font-mono text-xs font-medium text-slate-500">Period {slot.period_no} · {slot.start_time || '—'} - {slot.end_time || '—'}</p>
+                                        <h2 className="mt-1 font-bold text-slate-950">Class {slot.class_label} · {slot.subject || 'Free Period'}</h2>
+                                        <p className="text-sm font-medium text-slate-500">Assigned: {slot.teacher_name || 'Unassigned'}</p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        {slot.candidate_teachers.length === 0 ? (
+                                            <span className="rounded-full bg-rose-50 px-3 py-1 text-xs font-semibold text-rose-700">No free teachers</span>
+                                        ) : slot.candidate_teachers.map((teacher) => (
+                                            <span key={teacher.teacher_id} className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">{teacher.teacher_name} · {teacher.periods_today} periods</span>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         ))}
                     </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <h2 className="font-bold text-slate-950">Teacher Workload</h2>
+                        <div className="mt-4 space-y-3">
+                            {(data?.teacher_workload || []).map((teacher) => (
+                                <div key={teacher.teacher_id}>
+                                    <div className="mb-1 flex items-center justify-between text-sm">
+                                        <span className="font-semibold text-slate-800">{teacher.teacher_name}</span>
+                                        <span className="font-mono text-xs text-slate-500">{teacher.periods_today}</span>
+                                    </div>
+                                    <div className="h-2 rounded-full bg-slate-100">
+                                        <div className="h-full rounded-full bg-brand-navy-600" style={{ width: `${Math.min(100, teacher.periods_today * 12.5)}%` }} />
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
+const StudentDashboardView = ({ dashboard, setActiveTab }) => {
+    const [profileOpen, setProfileOpen] = useState(false)
+    const pendingInvoices = dashboard.invoices.filter((inv) => inv.status !== 'paid')
+    const todayDate = new Date()
+    const sevenDaysFromNow = new Date(todayDate)
+    sevenDaysFromNow.setDate(todayDate.getDate() + 7)
+    const nextDueInvoice = pendingInvoices
+        .filter((inv) => {
+            const due = new Date(inv.due_date)
+            return due >= new Date(todayDate.toDateString()) && due <= sevenDaysFromNow
+        })
+        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0]
+
+    const sortedAttendance = [...dashboard.attendance].sort((a, b) => new Date(a.date) - new Date(b.date))
+    const attendanceValues = sortedAttendance.slice(-30).map((record) => record.status === 'present' ? 1 : record.status === 'leave' ? 0.55 : 0.1)
+    const recentMarks = [...dashboard.marks].sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date))
+    const markValues = recentMarks.slice(-8).map((mark) => mark.max_marks > 0 ? (mark.marks_obtained / mark.max_marks) * 100 : 0)
+    const attendanceStreak = [...sortedAttendance].reverse().reduce((streak, record) => streak.done ? streak : (
+        record.status === 'present' ? { count: streak.count + 1, done: false } : { ...streak, done: true }
+    ), { count: 0, done: false }).count
+
+    const totalFees = dashboard.invoices.reduce((sum, inv) => sum + (inv.amount_paise || 0), 0)
+    const paidFees = dashboard.invoices.reduce((sum, inv) => sum + (inv.paid_paise || 0), 0)
+    const paidPct = totalFees > 0 ? Math.min(100, Math.round((paidFees / totalFees) * 100)) : 0
+    const homeworkCount = dashboard.stats?.homework_due_count ?? dashboard.homework?.length ?? 2
+    const nextClass = dashboard.today?.next_class || dashboard.next_class
+    const upcomingExam = (dashboard.exams || []).find((exam) => {
+        const date = new Date(exam.exam_date || exam.date)
+        const diffDays = Math.round((date - new Date(todayDate.toDateString())) / (24 * 60 * 60 * 1000))
+        return diffDays >= 0 && diffDays <= 1
+    })
+
+    const quickLinks = [
+        ['timetable', 'Timetable', <Calendar size={16} />],
+        ['marks', 'Marks', <BookOpen size={16} />],
+        ['fees', 'Fees', <CreditCard size={16} />],
+        ['exams', 'Exam Schedule', <GraduationCap size={16} />],
+    ]
+
+    return (
+        <div className="space-y-6">
+            <div className="flex items-start justify-between gap-4">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Welcome back</p>
+                    <h1 className="font-display text-3xl font-black tracking-tight text-slate-950">{dashboard.user.full_name}</h1>
+                    <p className="text-sm font-medium text-slate-500">
+                        Class {dashboard.profile.class_name}-{dashboard.profile.section} · Roll {dashboard.profile.roll_no || '—'}
+                    </p>
+                </div>
+                <button
+                    type="button"
+                    onClick={() => setProfileOpen(true)}
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-navy-100 text-sm font-bold text-brand-navy-700 hover:bg-brand-navy-200"
+                    title="Open profile"
+                >
+                    {dashboard.user.full_name?.[0] || <User size={18} />}
+                </button>
+            </div>
+
+            <div className="rounded-3xl border border-brand-navy-200 bg-brand-navy-50 p-6 shadow-sm">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-brand-navy-700 shadow-sm">
+                                <Calendar size={22} />
+                            </div>
+                            <div>
+                                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-600">Today</p>
+                                <h2 className="font-display text-2xl font-bold text-slate-950">
+                                    {new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }).format(todayDate)}
+                                </h2>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid flex-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                        <div className="rounded-2xl bg-white p-4 shadow-sm">
+                            <p className="text-xs font-medium text-slate-500">Next class</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{nextClass ? `${nextClass.subject} · ${nextClass.time || nextClass.start_time || '—'}` : 'Timetable not synced'}</p>
+                            {nextClass?.room && <p className="mt-0.5 text-xs text-slate-500">{nextClass.room}</p>}
+                        </div>
+                        <div className="rounded-2xl bg-white p-4 shadow-sm">
+                            <p className="text-xs font-medium text-slate-500">Homework due</p>
+                            <p className="mt-1 font-display text-xl font-bold text-slate-900">{homeworkCount}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4 shadow-sm">
+                            <p className="text-xs font-medium text-slate-500">Exam watch</p>
+                            <p className="mt-1 text-sm font-semibold text-slate-900">{upcomingExam ? `${upcomingExam.subject?.name || upcomingExam.subject || 'Exam'} · ${formatDate(upcomingExam.exam_date || upcomingExam.date)}` : 'No exam today'}</p>
+                        </div>
+                        <div className="rounded-2xl bg-white p-4 shadow-sm">
+                            <p className="text-xs font-medium text-slate-500">Fee due soon</p>
+                            <p className={`mt-1 text-sm font-semibold ${nextDueInvoice ? 'text-brand-crimson-700' : 'text-emerald-700'}`}>
+                                {nextDueInvoice ? `${money(getBalance(nextDueInvoice))} · ${formatDate(nextDueInvoice.due_date)}` : 'Nothing due'}
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
+            <div className="grid gap-4 lg:grid-cols-3">
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-medium text-slate-500">Attendance</p>
+                            <p className="mt-1 font-display text-3xl font-bold text-slate-900">{dashboard.stats.attendance_percent}%</p>
+                        </div>
+                        <span className="rounded-full bg-brand-navy-50 px-3 py-1 text-xs font-semibold text-brand-navy-700">{attendanceStreak} day streak</span>
+                    </div>
+                    <div className="mt-3"><MiniSparkline values={attendanceValues} /></div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <p className="text-xs font-medium text-slate-500">Marks average</p>
+                            <p className="mt-1 font-display text-3xl font-bold text-slate-900">{dashboard.stats.average_percent}%</p>
+                        </div>
+                        <span className="rounded-full bg-brand-gold-50 px-3 py-1 text-xs font-semibold text-brand-gold-700">Class avg pending</span>
+                    </div>
+                    <div className="mt-3"><MiniSparkline values={markValues} color="#D4A017" /></div>
+                </div>
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <p className="text-xs font-medium text-slate-500">Fees paid</p>
+                    <p className="mt-1 font-display text-3xl font-bold text-slate-900">{paidPct}%</p>
+                    <div className="mt-4 h-3 rounded-full bg-slate-100">
+                        <div className="h-full rounded-full bg-brand-navy-600" style={{ width: `${paidPct}%` }} />
+                    </div>
+                    <div className="mt-2 flex justify-between text-xs font-medium text-slate-500">
+                        <span>{money(paidFees)} paid</span>
+                        <span>{money(Math.max(0, totalFees - paidFees))} due</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+                {quickLinks.map(([tab, label, icon]) => (
+                    <button key={tab} type="button" onClick={() => setActiveTab(tab)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 shadow-sm hover:border-brand-navy-300 hover:bg-brand-navy-50 hover:text-brand-navy-700">
+                        {icon}
+                        {label}
+                    </button>
+                ))}
+            </div>
+
             <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                <h2 className="mb-4 text-lg font-black text-slate-950">Latest Marks</h2>
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Latest Marks</h2>
                 {dashboard.marks.length === 0
                     ? <EmptyState title="No marks published yet" icon={<BookOpen size={32} />} />
-                    : <MarksTable marks={dashboard.marks.slice(0, 6)} />}
+                    : <MarksTable marks={[...dashboard.marks].sort((a, b) => new Date(b.exam_date) - new Date(a.exam_date)).slice(0, 6)} />}
+            </div>
+
+            {profileOpen && <ProfileDrawer dashboard={dashboard} onClose={() => setProfileOpen(false)} />}
+        </div>
+    )
+}
+
+const isoDate = (date) => {
+    const copy = new Date(date)
+    copy.setMinutes(copy.getMinutes() - copy.getTimezoneOffset())
+    return copy.toISOString().slice(0, 10)
+}
+
+const AttendanceHeatmap = ({ records }) => {
+    const [selectedDate, setSelectedDate] = useState(null)
+    const byDate = useMemo(() => {
+        const map = {}
+        records.forEach((record) => { map[record.date] = record })
+        return map
+    }, [records])
+
+    const todayDate = new Date()
+    const academicStart = new Date(todayDate.getMonth() >= 3 ? todayDate.getFullYear() : todayDate.getFullYear() - 1, 3, 1)
+    const days = []
+    for (let cursor = new Date(academicStart); cursor <= todayDate; cursor.setDate(cursor.getDate() + 1)) {
+        days.push(isoDate(cursor))
+    }
+    const padStart = (new Date(days[0]).getDay() + 6) % 7
+    const cells = [...Array.from({ length: padStart }, (_, index) => `pad-${index}`), ...days]
+    const selectedRecord = selectedDate ? byDate[selectedDate] : null
+    const colorFor = (dateKey) => {
+        const status = byDate[dateKey]?.status
+        if (status === 'present') return 'bg-emerald-500 hover:bg-emerald-600'
+        if (status === 'absent') return 'bg-rose-500 hover:bg-rose-600'
+        if (status === 'leave') return 'bg-amber-400 hover:bg-amber-500'
+        return 'bg-slate-100 hover:bg-slate-200'
+    }
+
+    return (
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h2 className="text-lg font-bold text-slate-950">Academic Year Attendance</h2>
+                    <p className="text-xs font-medium text-slate-500">Tap a day to inspect status and note.</p>
+                </div>
+                <div className="flex flex-wrap gap-3 text-xs font-semibold text-slate-500">
+                    <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-emerald-500" /> Present</span>
+                    <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-rose-500" /> Absent</span>
+                    <span className="flex items-center gap-1"><span className="h-3 w-3 rounded-sm bg-amber-400" /> Leave</span>
+                </div>
+            </div>
+            <div className="grid grid-cols-7 gap-1 sm:grid-cols-[repeat(14,minmax(0,1fr))] lg:grid-cols-[repeat(26,minmax(0,1fr))]">
+                {cells.map((dateKey) => dateKey.startsWith('pad-') ? (
+                    <span key={dateKey} className="aspect-square" />
+                ) : (
+                    <button
+                        key={dateKey}
+                        type="button"
+                        onClick={() => setSelectedDate(dateKey)}
+                        title={`${formatDate(dateKey)} · ${byDate[dateKey]?.status || 'not marked'}`}
+                        className={`aspect-square rounded-[4px] transition-colors ${colorFor(dateKey)} ${selectedDate === dateKey ? 'ring-2 ring-brand-navy-700 ring-offset-2' : ''}`}
+                    />
+                ))}
+            </div>
+            <div className="mt-4 rounded-xl bg-slate-50 px-4 py-3">
+                {selectedDate ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <div>
+                            <p className="font-mono text-xs font-medium text-slate-500">{formatDate(selectedDate)}</p>
+                            <p className="mt-1 text-sm font-semibold capitalize text-slate-900">{selectedRecord?.status || 'Not marked'}</p>
+                            {selectedRecord?.note && <p className="mt-1 text-xs text-slate-500">{selectedRecord.note}</p>}
+                        </div>
+                        {selectedRecord?.status && <StatusBadge status={selectedRecord.status} />}
+                    </div>
+                ) : (
+                    <p className="text-sm font-medium text-slate-500">Select a day in the heatmap.</p>
+                )}
             </div>
         </div>
     )
@@ -615,6 +1218,8 @@ const StudentAttendance = ({ dashboard }) => {
                     tone="crimson"
                 />
             </div>
+
+            <AttendanceHeatmap records={dashboard.attendance} />
 
             {months.length > 0 && (
                 <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
@@ -669,10 +1274,11 @@ const StudentMarks = ({ dashboard }) => {
         if (!byExam[m.exam_name]) byExam[m.exam_name] = []
         byExam[m.exam_name].push(m)
     })
+    const comparisons = dashboard.stats?.mark_comparisons || {}
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-black text-slate-950">Marks</h1>
+            <h1 className="font-display text-3xl font-black text-slate-950">Marks</h1>
             {Object.entries(byExam).length === 0
                 ? <EmptyState title="No marks published yet" icon={<BookOpen size={32} />} />
                 : Object.entries(byExam).map(([examName, marks]) => {
@@ -682,12 +1288,48 @@ const StudentMarks = ({ dashboard }) => {
                     return (
                         <div key={examName} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
                             <div className="mb-4 flex items-center justify-between">
-                                <h2 className="text-lg font-black text-slate-950">{examName}</h2>
-                                <span className={`text-xl font-black ${pct >= 75 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-rose-700'}`}>
+                                <h2 className="text-lg font-bold text-slate-950">{examName}</h2>
+                                <span className={`font-display text-2xl font-bold ${pct >= 75 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-rose-700'}`}>
                                     {pct}%
                                 </span>
                             </div>
-                            <MarksTable marks={marks} />
+                            <div className="space-y-3">
+                                {marks.map((mark) => {
+                                    const markPct = mark.max_marks > 0 ? Math.round((mark.marks_obtained / mark.max_marks) * 100) : 0
+                                    const comparison = comparisons[mark.id] || comparisons[String(mark.id)]
+                                    return (
+                                        <div key={mark.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                                <div>
+                                                    <p className="font-semibold text-slate-950">{mark.subject}</p>
+                                                    <p className="font-mono text-xs font-medium text-slate-500">{formatDate(mark.exam_date)}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-display text-2xl font-bold text-slate-950">{mark.marks_obtained}/{mark.max_marks}</p>
+                                                    <p className={`text-xs font-semibold ${gradeColor(mark.grade)}`}>{mark.grade || `${markPct}%`}</p>
+                                                </div>
+                                            </div>
+                                            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                                                <div className="rounded-xl bg-white px-3 py-2">
+                                                    <p className="text-xs font-medium text-slate-500">Your score</p>
+                                                    <p className="font-display text-xl font-bold text-slate-900">{markPct}%</p>
+                                                </div>
+                                                <div className="rounded-xl bg-white px-3 py-2">
+                                                    <p className="text-xs font-medium text-slate-500">Class average</p>
+                                                    <p className="font-display text-xl font-bold text-slate-900">{comparison?.class_average_percent ?? '—'}{comparison?.class_average_percent != null ? '%' : ''}</p>
+                                                </div>
+                                                <div className="rounded-xl bg-white px-3 py-2">
+                                                    <p className="text-xs font-medium text-slate-500">Percentile</p>
+                                                    <p className="font-display text-xl font-bold capitalize text-slate-900">
+                                                        {comparison?.percentile != null ? `${comparison.percentile}th` : '—'}
+                                                        {comparison?.rank_band && <span className="ml-2 align-middle text-xs font-semibold text-brand-navy-600">{comparison.rank_band}</span>}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
                         </div>
                     )
                 })}
@@ -695,85 +1337,180 @@ const StudentMarks = ({ dashboard }) => {
     )
 }
 
-const FeesPanel = ({ dashboard, handlePay, openReceipt, busyId, receiptLoadingId }) => (
-    <div className="space-y-6">
-        <h1 className="text-2xl font-black text-slate-950">Fees</h1>
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-4">
-                <h2 className="text-lg font-black text-slate-950">Invoices</h2>
-            </div>
-            <div className="divide-y divide-slate-100">
-                {dashboard.invoices.map((inv) => (
-                    <div key={inv.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
-                        <div>
-                            <p className="font-black text-slate-950">{inv.title}</p>
-                            <p className="text-xs font-bold text-slate-500">{inv.invoice_no} · {inv.term}</p>
-                            <p className="mt-1 text-xs text-slate-400">Due {formatDate(inv.due_date)}</p>
+const FeesPanel = ({ dashboard, handlePay, openReceipt, sharePaymentReceipt, busyId, receiptLoadingId, shareLoadingId }) => {
+    const [payConfirm, setPayConfirm] = useState(null)
+    const invoices = dashboard.invoices || []
+    const payments = dashboard.payments || []
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount_paise || 0), 0)
+    const totalPaid = invoices.reduce((sum, inv) => sum + (inv.paid_paise || 0), 0)
+    const totalDue = invoices.reduce((sum, inv) => sum + getBalance(inv), 0)
+    const paidPercent = totalAmount > 0 ? Math.round((totalPaid / totalAmount) * 100) : 0
+    const nextDue = [...invoices]
+        .filter((inv) => getBalance(inv) > 0 && inv.due_date)
+        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0]
+    const groupedInvoices = invoices.reduce((groups, inv) => {
+        const key = inv.term || 'General'
+        groups[key] = [...(groups[key] || []), inv]
+        return groups
+    }, {})
+
+    return (
+        <div className="space-y-6">
+            <h1 className="text-2xl font-black text-slate-950">Fees</h1>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+                    <div>
+                        <p className="text-xs font-medium text-slate-500">Annual fee progress</p>
+                        <p className="mt-1 font-display text-3xl font-bold text-slate-950">{money(totalPaid)}</p>
+                        <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                            <div className="h-full rounded-full bg-brand-navy-600" style={{ width: `${Math.min(100, paidPercent)}%` }} />
                         </div>
-                        <div className="flex flex-wrap items-center gap-2">
-                            <div className="text-right mr-2">
-                                <p className="font-black text-slate-950">{money(inv.amount_paise)}</p>
-                                {getBalance(inv) > 0 && <p className="text-xs font-black text-brand-crimson-700">Due {money(getBalance(inv))}</p>}
+                        <p className="mt-2 text-xs font-medium text-slate-500">{paidPercent}% paid of {money(totalAmount)}</p>
+                    </div>
+                    <StatTile label="Paid" value={money(totalPaid)} icon={<Check size={19} />} tone="emerald" />
+                    <StatTile label="Due" value={money(totalDue)} icon={<CreditCard size={19} />} tone={totalDue > 0 ? 'crimson' : 'slate'} />
+                    <StatTile label="Next Due" value={nextDue ? formatDate(nextDue.due_date) : '—'} icon={<Calendar size={19} />} tone={nextDue ? 'gold' : 'slate'} sub={nextDue?.title} />
+                </div>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                    <h2 className="text-lg font-black text-slate-950">Invoices by Term</h2>
+                </div>
+                {invoices.length === 0 ? (
+                    <div className="p-6"><EmptyState title="No invoices assigned yet" icon={<CreditCard size={32} />} /></div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {Object.entries(groupedInvoices).map(([term, items]) => (
+                            <div key={term} className="p-5">
+                                <div className="mb-4 flex items-center justify-between">
+                                    <h3 className="font-bold text-slate-900">{term}</h3>
+                                    <span className="text-xs font-medium text-slate-500">{items.length} invoice{items.length === 1 ? '' : 's'}</span>
+                                </div>
+                                <div className="space-y-3">
+                                    {items.map((inv) => {
+                                        const balance = getBalance(inv)
+                                        const invoicePaidPercent = inv.amount_paise > 0 ? Math.round(((inv.paid_paise || 0) / inv.amount_paise) * 100) : 0
+                                        return (
+                                            <div key={inv.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                                    <div className="min-w-0">
+                                                        <p className="font-bold text-slate-950">{inv.title}</p>
+                                                        <p className="text-xs font-medium text-slate-500">{inv.invoice_no} · Due {formatDate(inv.due_date)}</p>
+                                                        <div className="mt-3 h-2 max-w-sm overflow-hidden rounded-full bg-white">
+                                                            <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, invoicePaidPercent)}%` }} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+                                                        <div className="mr-2 text-left sm:text-right">
+                                                            <p className="font-display text-xl font-bold text-slate-950">{money(inv.amount_paise)}</p>
+                                                            {balance > 0 && <p className="text-xs font-semibold text-brand-crimson-700">Due {money(balance)}</p>}
+                                                        </div>
+                                                        <StatusBadge status={inv.status} />
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => printInvoicePDF({ inv, student: { ...dashboard.profile, full_name: dashboard.user.full_name } })}
+                                                            className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50"
+                                                            title="Download Invoice PDF"
+                                                        >
+                                                            <Printer size={13} /> Invoice
+                                                        </button>
+                                                        {inv.status !== 'paid' && (
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => setPayConfirm(inv)}
+                                                                disabled={busyId === inv.id}
+                                                                className="inline-flex items-center gap-2 rounded-xl bg-brand-navy-600 px-4 py-2.5 text-xs font-semibold text-white hover:bg-brand-navy-700 disabled:opacity-60"
+                                                            >
+                                                                {busyId === inv.id ? <Loader2 className="animate-spin" size={14} /> : <CreditCard size={14} />}
+                                                                Pay
+                                                            </button>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )
+                                    })}
+                                </div>
                             </div>
-                            <StatusBadge status={inv.status} />
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-200 px-6 py-4">
+                    <h2 className="text-lg font-black text-slate-950">Payment History</h2>
+                </div>
+                {payments.length === 0 ? (
+                    <div className="p-6"><EmptyState title="No payments yet" icon={<Receipt size={32} />} /></div>
+                ) : (
+                    <div className="divide-y divide-slate-100">
+                        {payments.map((payment) => (
+                            <div key={payment.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="font-bold text-slate-950">{payment.receipt_no || 'Receipt pending'}</p>
+                                    <p className="text-xs font-medium text-slate-500">{formatDate(payment.paid_at)} · {payment.method}</p>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-3">
+                                    <p className="font-display text-xl font-bold text-slate-950">{money(payment.amount_paise)}</p>
+                                    {dashboard.profile.guardian_phone && (
+                                        <button
+                                            type="button"
+                                            onClick={() => sharePaymentReceipt(payment)}
+                                            disabled={shareLoadingId === payment.id}
+                                            className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-60"
+                                        >
+                                            {shareLoadingId === payment.id ? <Loader2 className="animate-spin" size={14} /> : <Phone size={14} />}
+                                            WhatsApp
+                                        </button>
+                                    )}
+                                    <button
+                                        type="button"
+                                        onClick={() => openReceipt(payment)}
+                                        disabled={receiptLoadingId === payment.id}
+                                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-navy-700 hover:bg-brand-navy-50 disabled:opacity-60"
+                                    >
+                                        {receiptLoadingId === payment.id ? <Loader2 className="animate-spin" size={14} /> : <Receipt size={14} />}
+                                        Receipt
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
+
+            {payConfirm && (
+                <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4">
+                    <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+                        <h3 className="text-lg font-black text-slate-950">Confirm Payment</h3>
+                        <p className="mt-2 text-sm text-slate-500">{payConfirm.title}</p>
+                        <div className="mt-5 rounded-2xl bg-brand-navy-50 p-4">
+                            <p className="text-xs font-medium text-brand-navy-700">Amount payable now</p>
+                            <p className="mt-1 font-display text-3xl font-bold text-brand-navy-950">{money(getBalance(payConfirm))}</p>
+                            <p className="mt-1 text-xs font-medium text-brand-navy-600">Invoice {payConfirm.invoice_no}</p>
+                        </div>
+                        <div className="mt-6 flex gap-3">
+                            <button type="button" onClick={() => setPayConfirm(null)} className="flex-1 rounded-xl border border-slate-200 py-3 text-sm font-semibold text-slate-600">Cancel</button>
                             <button
                                 type="button"
-                                onClick={() => printInvoicePDF({ inv, student: { ...dashboard.profile, full_name: dashboard.user.full_name } })}
-                                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-slate-600 hover:bg-slate-50"
-                                title="Download Invoice PDF"
+                                onClick={() => {
+                                    handlePay(payConfirm)
+                                    setPayConfirm(null)
+                                }}
+                                className="flex-1 rounded-xl bg-brand-navy-700 py-3 text-sm font-semibold text-white hover:bg-brand-navy-800"
                             >
-                                <Printer size={13} /> Invoice
+                                Continue
                             </button>
-                            {inv.status !== 'paid' && (
-                                <button
-                                    type="button"
-                                    onClick={() => handlePay(inv)}
-                                    disabled={busyId === inv.id}
-                                    className="inline-flex items-center gap-2 rounded-xl bg-brand-navy-600 px-4 py-2.5 text-xs font-black uppercase tracking-wider text-white hover:bg-brand-navy-700 disabled:opacity-60"
-                                >
-                                    {busyId === inv.id ? <Loader2 className="animate-spin" size={14} /> : <CreditCard size={14} />}
-                                    Pay
-                                </button>
-                            )}
                         </div>
                     </div>
-                ))}
-            </div>
-        </div>
-
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div className="border-b border-slate-200 px-6 py-4">
-                <h2 className="text-lg font-black text-slate-950">Payment History</h2>
-            </div>
-            {dashboard.payments.length === 0 ? (
-                <div className="p-6"><EmptyState title="No payments yet" /></div>
-            ) : (
-                <div className="divide-y divide-slate-100">
-                    {dashboard.payments.map((payment) => (
-                        <div key={payment.id} className="flex items-center justify-between gap-4 p-5">
-                            <div>
-                                <p className="font-black text-slate-950">{payment.receipt_no || 'Receipt pending'}</p>
-                                <p className="text-xs font-bold text-slate-500">{formatDate(payment.paid_at)} · {payment.method}</p>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <p className="font-black text-slate-950">{money(payment.amount_paise)}</p>
-                                <button
-                                    type="button"
-                                    onClick={() => openReceipt(payment)}
-                                    disabled={receiptLoadingId === payment.id}
-                                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-black text-brand-navy-700 hover:bg-brand-navy-50 disabled:opacity-60"
-                                >
-                                    {receiptLoadingId === payment.id ? <Loader2 className="animate-spin" size={14} /> : <Receipt size={14} />}
-                                    Receipt
-                                </button>
-                            </div>
-                        </div>
-                    ))}
                 </div>
             )}
         </div>
-    </div>
-)
+    )
+}
 
 const StudentTimetable = ({ apiRequest, dashboard }) => {
     const [slots, setSlots] = useState([])
@@ -782,6 +1519,7 @@ const StudentTimetable = ({ apiRequest, dashboard }) => {
 
     const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
     const todayDow = (new Date().getDay() + 6) % 7 // 0=Mon
+    const [selectedDay, setSelectedDay] = useState(Math.min(todayDow, 5))
 
     useEffect(() => {
         if (!classSectionId) { setLoading(false); return }
@@ -791,7 +1529,7 @@ const StudentTimetable = ({ apiRequest, dashboard }) => {
             .finally(() => setLoading(false))
     }, [classSectionId]) // eslint-disable-line
 
-    if (loading) return <div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-brand-navy-600" size={32} /></div>
+    if (loading) return <PanelSkeleton cards={6} />
 
     if (!classSectionId || slots.length === 0) return (
         <div className="space-y-4">
@@ -804,6 +1542,22 @@ const StudentTimetable = ({ apiRequest, dashboard }) => {
     const byDay = {}
     DAYS.forEach((_, i) => { byDay[i] = {} })
     slots.forEach((s) => { byDay[s.day_of_week][s.period_no] = s })
+    const parseMinutes = (value) => {
+        if (!value) return null
+        const [hours, minutes] = value.split(':').map(Number)
+        if (Number.isNaN(hours) || Number.isNaN(minutes)) return null
+        return hours * 60 + minutes
+    }
+    const now = new Date()
+    const nowMinutes = now.getHours() * 60 + now.getMinutes()
+    const currentSlot = todayDow < DAYS.length
+        ? slots.find((slot) => {
+            const start = parseMinutes(slot.start_time)
+            const end = parseMinutes(slot.end_time)
+            return slot.day_of_week === todayDow && start !== null && end !== null && nowMinutes >= start && nowMinutes <= end
+        })
+        : null
+    const daySlots = periods.map((period) => byDay[selectedDay][period]).filter(Boolean)
 
     const subjectColors = ['bg-brand-navy-100 text-brand-navy-800', 'bg-brand-crimson-50 text-brand-crimson-800',
         'bg-brand-gold-50 text-amber-800', 'bg-emerald-50 text-emerald-800', 'bg-purple-50 text-purple-800', 'bg-pink-50 text-pink-800']
@@ -819,7 +1573,44 @@ const StudentTimetable = ({ apiRequest, dashboard }) => {
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-black text-slate-950">Timetable</h1>
-            <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+
+            <div className="space-y-4 lg:hidden">
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                    {DAYS.map((day, index) => (
+                        <button
+                            key={day}
+                            type="button"
+                            onClick={() => setSelectedDay(index)}
+                            className={`shrink-0 rounded-xl border px-4 py-2 text-sm font-semibold ${
+                                selectedDay === index
+                                    ? 'border-brand-navy-600 bg-brand-navy-600 text-white'
+                                    : 'border-slate-200 bg-white text-slate-600'
+                            }`}
+                        >
+                            {day}
+                        </button>
+                    ))}
+                </div>
+                <div className="space-y-3">
+                    {daySlots.map((slot) => {
+                        const isCurrent = currentSlot?.id === slot.id
+                        return (
+                            <div key={slot.id} className={`rounded-2xl border bg-white p-4 shadow-sm ${isCurrent ? 'border-brand-gold-400 ring-4 ring-brand-gold-100' : 'border-slate-200'}`}>
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="font-mono text-xs font-medium text-slate-500">{slot.start_time} - {slot.end_time}</p>
+                                        <p className="mt-1 text-lg font-bold text-slate-950">{slot.is_break ? 'Break' : slot.subject?.name || 'Free Period'}</p>
+                                        {slot.teacher && <p className="mt-1 text-sm font-medium text-slate-500">{slot.teacher.user?.full_name}</p>}
+                                    </div>
+                                    {isCurrent && <span className="rounded-full bg-brand-gold-100 px-3 py-1 text-xs font-semibold text-brand-gold-800">Now</span>}
+                                </div>
+                            </div>
+                        )
+                    })}
+                </div>
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm lg:block">
                 <table className="min-w-[640px] w-full text-sm">
                     <thead>
                         <tr className="border-b border-slate-200">
@@ -836,10 +1627,12 @@ const StudentTimetable = ({ apiRequest, dashboard }) => {
                         {periods.map((period) => {
                             const sampleSlot = byDay[0][period] || byDay[1][period]
                             const isBreak = sampleSlot?.is_break
+                            const isCurrentPeriod = currentSlot?.period_no === period
                             return (
-                                <tr key={period} className={`border-b border-slate-100 last:border-0 ${isBreak ? 'bg-slate-50' : ''}`}>
+                                <tr key={period} className={`border-b border-slate-100 last:border-0 ${isBreak ? 'bg-slate-50' : ''} ${isCurrentPeriod ? 'bg-brand-gold-50/70' : ''}`}>
                                     <td className="py-2 pl-4 text-xs font-black text-slate-400">
                                         {sampleSlot?.start_time && <span>{sampleSlot.start_time}–{sampleSlot.end_time}</span>}
+                                        {isCurrentPeriod && <span className="ml-2 rounded-full bg-brand-gold-100 px-2 py-0.5 text-[10px] font-semibold text-brand-gold-800">Now</span>}
                                     </td>
                                     {DAYS.map((_, dayIdx) => {
                                         const slot = byDay[dayIdx][period]
@@ -881,25 +1674,80 @@ const StudentExams = ({ apiRequest, dashboard }) => {
             .finally(() => setLoading(false))
     }, [classSectionId]) // eslint-disable-line
 
-    if (loading) return <div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-brand-navy-600" size={32} /></div>
+    if (loading) return <PanelSkeleton cards={3} />
+
+    const sortedExams = [...exams].sort((a, b) => new Date(a.exam_date) - new Date(b.exam_date))
+    const countdown = (dateValue) => {
+        const examDate = new Date(new Date(dateValue).toDateString())
+        const todayDate = new Date(new Date().toDateString())
+        const days = Math.round((examDate - todayDate) / (24 * 60 * 60 * 1000))
+        if (days < 0) return `${Math.abs(days)}d ago`
+        if (days === 0) return 'Today'
+        if (days === 1) return 'Tomorrow'
+        return `In ${days} days`
+    }
+    const icsStamp = (dateValue, timeValue, fallbackHour = 9) => {
+        const [hour = fallbackHour, minute = 0] = (timeValue || `${fallbackHour}:00`).split(':').map(Number)
+        const date = new Date(dateValue)
+        date.setHours(hour, minute, 0, 0)
+        return date.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
+    }
+    const downloadIcs = (exam) => {
+        const title = `${exam.exam_name}: ${exam.subject?.name || 'Exam'}`
+        const body = [
+            'BEGIN:VCALENDAR',
+            'VERSION:2.0',
+            'PRODID:-//Narendra Edu Valley//ERP Exams//EN',
+            'BEGIN:VEVENT',
+            `UID:exam-${exam.id}@nevalley.edu.in`,
+            `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')}`,
+            `DTSTART:${icsStamp(exam.exam_date, exam.start_time, 9)}`,
+            `DTEND:${icsStamp(exam.exam_date, exam.end_time, 10)}`,
+            `SUMMARY:${title}`,
+            `LOCATION:${exam.venue || ''}${exam.hall_no ? ` Hall ${exam.hall_no}` : ''}`,
+            `DESCRIPTION:Max marks ${exam.max_marks || ''}`,
+            'END:VEVENT',
+            'END:VCALENDAR',
+        ].join('\r\n')
+        const blob = new Blob([body], { type: 'text/calendar;charset=utf-8' })
+        const url = URL.createObjectURL(blob)
+        const anchor = document.createElement('a')
+        anchor.href = url
+        anchor.download = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.ics`
+        anchor.click()
+        URL.revokeObjectURL(url)
+    }
 
     return (
         <div className="space-y-6">
             <h1 className="text-2xl font-black text-slate-950">Exam Schedule</h1>
-            {exams.length === 0
+            {sortedExams.length === 0
                 ? <EmptyState title="No exams scheduled" icon={<GraduationCap size={32} />} />
                 : (
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                        {exams.map((exam) => (
+                        {sortedExams.map((exam) => (
                             <div key={exam.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                                <p className="mb-1 text-xs font-black uppercase tracking-wider text-brand-navy-600">{exam.exam_name}</p>
-                                <p className="text-xl font-black text-slate-950">{exam.subject?.name || '—'}</p>
-                                <div className="mt-4 space-y-1.5 text-sm font-bold text-slate-600">
-                                    <p>📅 {formatDate(exam.exam_date)}</p>
-                                    {exam.start_time && <p>🕐 {exam.start_time} – {exam.end_time}</p>}
-                                    {exam.venue && <p>📍 {exam.venue}{exam.hall_no ? ` · Hall ${exam.hall_no}` : ''}</p>}
-                                    <p>✏️ Max Marks: {exam.max_marks}</p>
+                                <div className="mb-3 flex items-start justify-between gap-3">
+                                    <div>
+                                        <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-brand-navy-600">{exam.exam_name}</p>
+                                        <p className="text-xl font-black text-slate-950">{exam.subject?.name || '—'}</p>
+                                    </div>
+                                    <span className="shrink-0 rounded-full bg-brand-gold-100 px-3 py-1 text-xs font-semibold text-brand-gold-800">{countdown(exam.exam_date)}</span>
                                 </div>
+                                <div className="mt-4 space-y-1.5 text-sm font-bold text-slate-600">
+                                    <p className="flex items-center gap-2"><Calendar size={14} className="text-brand-navy-500" /> {formatDate(exam.exam_date)}</p>
+                                    {exam.start_time && <p className="flex items-center gap-2"><Clock size={14} className="text-brand-navy-500" /> {exam.start_time} – {exam.end_time}</p>}
+                                    {exam.venue && <p className="flex items-center gap-2"><MapPin size={14} className="text-brand-navy-500" /> {exam.venue}{exam.hall_no ? ` · Hall ${exam.hall_no}` : ''}</p>}
+                                    <p className="flex items-center gap-2"><Pencil size={14} className="text-brand-navy-500" /> Max Marks: {exam.max_marks}</p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => downloadIcs(exam)}
+                                    className="mt-5 inline-flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2 text-xs font-semibold text-brand-navy-700 hover:bg-brand-navy-50"
+                                >
+                                    <Calendar size={14} />
+                                    Add to calendar
+                                </button>
                             </div>
                         ))}
                     </div>
@@ -1313,7 +2161,7 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
                 method: 'POST',
                 body: JSON.stringify(payload),
             })
-            setDefaultPwd({ password: res.default_password, email: res.email })
+            setDefaultPwd({ password: res.default_password, email: res.email, guardian: res.guardian_credentials })
         } catch (err) {
             toast.error(err.message || 'Could not add student')
         } finally {
@@ -1341,6 +2189,22 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
                             <p className="mt-1 text-xs text-slate-400">{form.date_of_birth ? 'Date of birth as DDMMYYYY' : 'Default — student should change this'}</p>
                         </div>
                     </div>
+                    {defaultPwd.guardian?.email && (
+                        <div className="mt-4 space-y-3 rounded-2xl bg-brand-navy-50 p-5">
+                            <div>
+                                <p className="text-xs font-semibold text-brand-navy-700">Guardian Email</p>
+                                <p className="mt-1 font-black text-slate-900">{defaultPwd.guardian.email}</p>
+                            </div>
+                            {defaultPwd.guardian.password ? (
+                                <div>
+                                    <p className="text-xs font-semibold text-brand-navy-700">Guardian Password</p>
+                                    <p className="mt-1 font-black text-brand-navy-700">{defaultPwd.guardian.password}</p>
+                                </div>
+                            ) : (
+                                <p className="text-xs font-medium text-brand-navy-700">Existing guardian account linked.</p>
+                            )}
+                        </div>
+                    )}
                     <button
                         type="button"
                         onClick={() => { onSuccess(); onClose() }}
@@ -1362,7 +2226,7 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
                 </div>
                 <form onSubmit={submit} className="space-y-5 p-6">
                     <div className="rounded-xl bg-brand-navy-50 px-4 py-3 text-xs font-bold text-brand-navy-700">
-                        Default password = Date of birth (DDMMYYYY). If DOB not provided, password is "student123".
+                        Default password = Date of birth (DDMMYYYY). If DOB is not provided, the backend generates a one-time random password.
                     </div>
 
                     <p className="text-xs font-black uppercase tracking-wider text-slate-400">Student Info</p>
@@ -1455,7 +2319,7 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
     )
 }
 
-const StudentProfileCard = ({ student, onDisable, disabling }) => {
+const StudentProfileCard = ({ student, onDisable, disabling, onOpen }) => {
     const [open, setOpen] = useState(false)
     const isActive = (student.profile.status || 'active') === 'active'
 
@@ -1464,7 +2328,10 @@ const StudentProfileCard = ({ student, onDisable, disabling }) => {
             {/* Summary row — always visible */}
             <button
                 type="button"
-                onClick={() => setOpen((v) => !v)}
+                onClick={() => {
+                    setOpen((v) => !v)
+                    onOpen?.(student)
+                }}
                 style={{ touchAction: 'manipulation' }}
                 className="flex w-full items-start justify-between gap-4 p-4 text-left"
             >
@@ -1567,6 +2434,10 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
     const [loadingClass, setLoadingClass] = useState(false)
     const [disablingId, setDisablingId] = useState(null)
     const [confirmDisable, setConfirmDisable] = useState(null) // student object pending confirmation
+    const searchInputRef = useRef(null)
+    const [recentStudentIds, setRecentStudentIds] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('teacherRecentStudents') || '[]') } catch { return [] }
+    })
 
     useEffect(() => {
         // Load all students (not just teacher's class) for the full browse view
@@ -1576,6 +2447,19 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
             .finally(() => setLoadingAll(false))
         apiRequest(API_ENDPOINTS.erpClassSections).then(setClassSections).catch(() => {})
     }, []) // eslint-disable-line
+
+    useEffect(() => {
+        const handleKey = (event) => {
+            const tag = document.activeElement?.tagName
+            const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT'
+            const wantsSearch = event.key === '/' || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k')
+            if (!wantsSearch || isTyping) return
+            event.preventDefault()
+            searchInputRef.current?.focus()
+        }
+        window.addEventListener('keydown', handleKey)
+        return () => window.removeEventListener('keydown', handleKey)
+    }, [])
 
     const selectSection = async (cs) => {
         if (selectedSection?.id === cs?.id) return
@@ -1600,12 +2484,31 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
 
     const filtered = students.filter((s) => {
         const q = search.toLowerCase()
-        return s.user.full_name.toLowerCase().includes(q) ||
-            s.profile.admission_no?.toLowerCase().includes(q)
+        const haystack = [
+            s.user.full_name,
+            s.user.email,
+            s.user.phone,
+            s.profile.admission_no,
+            s.profile.roll_no,
+            s.profile.guardian_name,
+            s.profile.guardian_phone,
+            `${s.profile.class_name}-${s.profile.section}`,
+        ].filter(Boolean).join(' ').toLowerCase()
+        return haystack.includes(q)
     })
 
-    const active = filtered.filter((s) => (s.profile.status || 'active') === 'active')
-    const inactive = filtered.filter((s) => (s.profile.status || 'active') !== 'active')
+    const recentRank = (student) => {
+        const index = recentStudentIds.indexOf(String(student.profile.id))
+        return index === -1 ? Number.MAX_SAFE_INTEGER : index
+    }
+    const byRecent = (a, b) => recentRank(a) - recentRank(b) || a.user.full_name.localeCompare(b.user.full_name)
+    const active = filtered.filter((s) => (s.profile.status || 'active') === 'active').sort(byRecent)
+    const inactive = filtered.filter((s) => (s.profile.status || 'active') !== 'active').sort(byRecent)
+    const rememberStudent = (student) => {
+        const next = [String(student.profile.id), ...recentStudentIds.filter((id) => id !== String(student.profile.id))].slice(0, 8)
+        setRecentStudentIds(next)
+        localStorage.setItem('teacherRecentStudents', JSON.stringify(next))
+    }
 
     const applyStatusChange = (profileId, newStatus) => {
         const updater = (prev) => prev.map((s) =>
@@ -1668,10 +2571,11 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
             </div>
 
             <input
+                ref={searchInputRef}
                 type="search"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search by name or admission no..."
+                placeholder="Search by name, roll, admission no, phone... Press /"
                 className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-base font-bold outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
             />
 
@@ -1693,6 +2597,7 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
                             key={student.profile.id}
                             student={student}
                             onDisable={(s) => setConfirmDisable(s)}
+                            onOpen={rememberStudent}
                             disabling={disablingId === student.profile.id}
                         />
                     ))}
@@ -1704,6 +2609,7 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
                                     key={student.profile.id}
                                     student={student}
                                     onDisable={(s) => setConfirmDisable(s)}
+                                    onOpen={rememberStudent}
                                     disabling={disablingId === student.profile.id}
                                 />
                             ))}
@@ -1761,76 +2667,298 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
     )
 }
 
-const TeacherLeaves = ({ dashboard, updateLeave, busyId, studentMap }) => (
-    <div className="space-y-4">
-        <h1 className="text-2xl font-black text-slate-950">Leave Requests</h1>
-        {dashboard.leaves.length === 0 ? (
-            <EmptyState title="No leave requests yet" icon={<Bell size={32} />} />
-        ) : (
-            <div className="space-y-3">
-                {dashboard.leaves.map((leave) => (
-                    <div key={leave.id} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                                <p className="font-black text-slate-950">{studentMap[leave.student_id]?.user?.full_name || 'Student'}</p>
-                                <p className="text-sm font-bold text-slate-500">{formatDate(leave.from_date)} to {formatDate(leave.to_date)} · {leave.days_count} day(s)</p>
-                                <p className="mt-2 text-sm text-slate-600">{leave.reason}</p>
-                            </div>
-                            <StatusBadge status={leave.status} />
+const TeacherLeaves = ({ dashboard, updateLeave, busyId, studentMap }) => {
+    const pending = dashboard.leaves.filter((leave) => leave.status === 'pending')
+    const reviewed = dashboard.leaves.filter((leave) => leave.status !== 'pending')
+    const queue = pending.length > 0 ? pending : dashboard.leaves
+    const [selectedId, setSelectedId] = useState(queue[0]?.id || null)
+
+    useEffect(() => {
+        if (!selectedId && queue[0]) setSelectedId(queue[0].id)
+        if (selectedId && !queue.some((leave) => leave.id === selectedId) && queue[0]) setSelectedId(queue[0].id)
+    }, [queue, selectedId])
+
+    const selectedIndex = Math.max(0, queue.findIndex((leave) => leave.id === selectedId))
+    const selected = queue[selectedIndex] || null
+    const selectedStudent = selected ? studentMap[selected.student_id] : null
+    const priorLeaves = selected ? dashboard.leaves.filter((leave) => leave.student_id === selected.student_id && leave.id !== selected.id) : []
+
+    useEffect(() => {
+        const handleKey = (event) => {
+            if (!selected) return
+            const tag = event.target?.tagName?.toLowerCase()
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') return
+            if (event.key.toLowerCase() === 'j') {
+                event.preventDefault()
+                setSelectedId(queue[Math.min(queue.length - 1, selectedIndex + 1)]?.id)
+            }
+            if (event.key.toLowerCase() === 'k') {
+                event.preventDefault()
+                setSelectedId(queue[Math.max(0, selectedIndex - 1)]?.id)
+            }
+            if (selected.status === 'pending' && event.key.toLowerCase() === 'a') {
+                event.preventDefault()
+                updateLeave(selected, 'approved')
+            }
+            if (selected.status === 'pending' && event.key.toLowerCase() === 'r') {
+                event.preventDefault()
+                updateLeave(selected, 'rejected')
+            }
+        }
+        document.addEventListener('keydown', handleKey)
+        return () => document.removeEventListener('keydown', handleKey)
+    }, [queue, selected, selectedIndex, updateLeave])
+
+    return (
+        <div className="space-y-6">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Leave triage</p>
+                    <h1 className="font-display text-3xl font-black text-slate-950">Leave Requests</h1>
+                </div>
+                <div className="flex gap-2 text-xs font-semibold text-slate-500">
+                    <span className="rounded-full bg-amber-50 px-3 py-1 text-amber-700">{pending.length} pending</span>
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-slate-600">{reviewed.length} reviewed</span>
+                </div>
+            </div>
+
+            {dashboard.leaves.length === 0 ? (
+                <EmptyState title="No leave requests yet" icon={<Bell size={32} />} />
+            ) : (
+                <div className="grid gap-5 xl:grid-cols-[380px_1fr]">
+                    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="border-b border-slate-100 px-5 py-4">
+                            <h2 className="text-base font-bold text-slate-950">{pending.length > 0 ? 'Pending queue' : 'Recent decisions'}</h2>
                         </div>
-                        {leave.status === 'pending' && (
-                            <div className="mt-4 flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => updateLeave(leave, 'approved')}
-                                    disabled={busyId === `${leave.id}-approved`}
-                                    className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-black uppercase tracking-wider text-white disabled:opacity-60"
-                                >
-                                    {busyId === `${leave.id}-approved` ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Approve'}
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => updateLeave(leave, 'rejected')}
-                                    disabled={busyId === `${leave.id}-rejected`}
-                                    className="flex-1 rounded-xl bg-rose-600 py-3 text-sm font-black uppercase tracking-wider text-white disabled:opacity-60"
-                                >
-                                    {busyId === `${leave.id}-rejected` ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Reject'}
-                                </button>
+                        <div className="max-h-[620px] divide-y divide-slate-100 overflow-y-auto">
+                            {queue.map((leave) => {
+                                const student = studentMap[leave.student_id]
+                                return (
+                                    <button
+                                        key={leave.id}
+                                        type="button"
+                                        onClick={() => setSelectedId(leave.id)}
+                                        className={`w-full p-4 text-left transition-colors ${selectedId === leave.id ? 'bg-brand-navy-50' : 'hover:bg-slate-50'}`}
+                                    >
+                                        <div className="flex items-start justify-between gap-3">
+                                            <div className="min-w-0">
+                                                <p className="truncate text-sm font-semibold text-slate-950">{student?.user?.full_name || 'Student'}</p>
+                                                <p className="mt-1 font-mono text-xs font-medium text-slate-500">{formatDate(leave.from_date)} → {formatDate(leave.to_date)}</p>
+                                            </div>
+                                            <StatusBadge status={leave.status} />
+                                        </div>
+                                        <p className="mt-2 line-clamp-2 text-xs leading-5 text-slate-500">{leave.reason}</p>
+                                    </button>
+                                )
+                            })}
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        {!selected ? (
+                            <div className="p-8"><EmptyState title="Select a leave request" icon={<Bell size={32} />} /></div>
+                        ) : (
+                            <div className="flex min-h-[620px] flex-col">
+                                <div className="border-b border-slate-100 p-6">
+                                    <div className="flex flex-wrap items-start justify-between gap-4">
+                                        <div>
+                                            <h2 className="font-display text-2xl font-bold text-slate-950">{selectedStudent?.user?.full_name || 'Student'}</h2>
+                                            <p className="mt-1 text-sm font-medium text-slate-500">
+                                                Class {selectedStudent?.profile?.class_name || '—'}-{selectedStudent?.profile?.section || '—'}
+                                                {selectedStudent?.profile?.roll_no ? ` · Roll ${selectedStudent.profile.roll_no}` : ''}
+                                            </p>
+                                        </div>
+                                        <StatusBadge status={selected.status} />
+                                    </div>
+                                </div>
+
+                                <div className="flex-1 space-y-5 p-6">
+                                    <div className="grid gap-3 md:grid-cols-3">
+                                        <Info label="Dates" value={`${formatDate(selected.from_date)} to ${formatDate(selected.to_date)}`} />
+                                        <Info label="Duration" value={`${selected.days_count} day${selected.days_count === 1 ? '' : 's'}`} />
+                                        <Info label="Attendance" value={`${selectedStudent?.attendance_percent ?? '—'}%`} />
+                                    </div>
+                                    <div className="rounded-2xl bg-slate-50 p-5">
+                                        <p className="mb-2 text-xs font-medium text-slate-500">Reason</p>
+                                        <p className="text-sm leading-7 text-slate-700">{selected.reason}</p>
+                                    </div>
+                                    <div className="grid gap-3 md:grid-cols-2">
+                                        <div className="rounded-2xl border border-slate-200 p-4">
+                                            <p className="text-xs font-medium text-slate-500">Prior leave count</p>
+                                            <p className="mt-1 font-display text-3xl font-bold text-slate-950">{priorLeaves.length}</p>
+                                        </div>
+                                        <div className="rounded-2xl border border-slate-200 p-4">
+                                            <p className="text-xs font-medium text-slate-500">Latest decision</p>
+                                            <p className="mt-1 text-sm font-semibold text-slate-900">
+                                                {priorLeaves[0] ? `${priorLeaves[0].status} · ${formatDate(priorLeaves[0].created_at)}` : 'No prior leave requests'}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="border-t border-slate-100 p-4">
+                                    {selected.status === 'pending' ? (
+                                        <div className="flex flex-col gap-3 sm:flex-row">
+                                            <button
+                                                type="button"
+                                                onClick={() => updateLeave(selected, 'approved')}
+                                                disabled={busyId === `${selected.id}-approved`}
+                                                className="flex-1 rounded-xl bg-emerald-600 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                                            >
+                                                {busyId === `${selected.id}-approved` ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Approve'}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                onClick={() => updateLeave(selected, 'rejected')}
+                                                disabled={busyId === `${selected.id}-rejected`}
+                                                className="flex-1 rounded-xl bg-rose-600 py-3 text-sm font-semibold text-white disabled:opacity-60"
+                                            >
+                                                {busyId === `${selected.id}-rejected` ? <Loader2 className="mx-auto animate-spin" size={16} /> : 'Reject'}
+                                            </button>
+                                        </div>
+                                    ) : (
+                                        <p className="text-sm font-medium text-slate-500">This request has already been reviewed.</p>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
-                ))}
-            </div>
-        )}
-    </div>
-)
+                </div>
+            )}
+        </div>
+    )
+}
 
-const TeacherMarks = ({ dashboard, createMark, studentMap }) => {
+const gradeFromPercent = (marks, maxMarks) => {
+    const pct = maxMarks > 0 ? Math.round((marks / maxMarks) * 100) : 0
+    if (pct >= 90) return 'A+'
+    if (pct >= 75) return 'A'
+    if (pct >= 60) return 'B+'
+    if (pct >= 50) return 'B'
+    if (pct >= 40) return 'C'
+    return 'D'
+}
+
+const TeacherMarks = ({ dashboard, createMark, studentMap, refreshDashboard }) => {
+    const [selectedClass, setSelectedClass] = useState('')
     const [form, setForm] = useState({
-        student_id: '',
         subject: dashboard.profile.subject || '',
         exam_name: '',
-        marks_obtained: '',
         max_marks: '100',
-        grade: '',
-        remarks: '',
         exam_date: today(),
     })
+    const [marksByStudent, setMarksByStudent] = useState({})
     const [saving, setSaving] = useState(false)
+    const [saveSummary, setSaveSummary] = useState(null)
 
-    const submit = async (e) => {
-        e.preventDefault()
+    const classOptions = useMemo(() => {
+        const map = {}
+        ;(dashboard.students || []).forEach((student) => {
+            const key = student.profile.class_section_id
+                ? String(student.profile.class_section_id)
+                : `${student.profile.class_name}-${student.profile.section}`
+            if (!map[key]) {
+                map[key] = {
+                    key,
+                    label: `Class ${student.profile.class_name}-${student.profile.section}`,
+                    count: 0,
+                }
+            }
+            map[key].count += 1
+        })
+        return Object.values(map).sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }))
+    }, [dashboard.students])
+
+    useEffect(() => {
+        if (!selectedClass && classOptions.length > 0) setSelectedClass(classOptions[0].key)
+    }, [classOptions, selectedClass])
+
+    useEffect(() => {
+        setMarksByStudent({})
+        setSaveSummary(null)
+    }, [selectedClass])
+
+    const subjectOptions = useMemo(() => {
+        const set = new Set([dashboard.profile.subject, ...(dashboard.marks || []).map((mark) => mark.subject)].filter(Boolean))
+        return Array.from(set)
+    }, [dashboard.profile.subject, dashboard.marks])
+
+    const selectedStudents = (dashboard.students || [])
+        .filter((student) => {
+            const key = student.profile.class_section_id
+                ? String(student.profile.class_section_id)
+                : `${student.profile.class_name}-${student.profile.section}`
+            return key === selectedClass
+        })
+        .sort((a, b) => String(a.profile.roll_no || '').localeCompare(String(b.profile.roll_no || ''), undefined, { numeric: true }))
+
+    const maxMarks = Number(form.max_marks)
+    const enteredRows = selectedStudents.filter((student) => {
+        const value = marksByStudent[student.profile.id]
+        return value !== undefined && value !== ''
+    })
+    const numericMarks = enteredRows.map((student) => Number(marksByStudent[student.profile.id]))
+    const invalidIds = new Set(enteredRows
+        .filter((student) => {
+            const value = Number(marksByStudent[student.profile.id])
+            return Number.isNaN(value) || value < 0 || value > maxMarks || maxMarks <= 0
+        })
+        .map((student) => student.profile.id))
+    const validMarks = numericMarks.filter((value) => !Number.isNaN(value) && value >= 0 && value <= maxMarks)
+    const average = validMarks.length > 0 ? Math.round(validMarks.reduce((sum, value) => sum + value, 0) / validMarks.length * 10) / 10 : 0
+    const sortedValid = [...validMarks].sort((a, b) => a - b)
+    const median = sortedValid.length === 0
+        ? 0
+        : sortedValid.length % 2
+            ? sortedValid[Math.floor(sortedValid.length / 2)]
+            : Math.round(((sortedValid[sortedValid.length / 2 - 1] + sortedValid[sortedValid.length / 2]) / 2) * 10) / 10
+
+    const updateMarks = (studentId, value) => {
+        setSaveSummary(null)
+        setMarksByStudent((prev) => ({ ...prev, [studentId]: value }))
+    }
+
+    const clearForAnotherSubject = () => {
+        setMarksByStudent({})
+        setSaveSummary(null)
+        setForm((prev) => ({ ...prev, subject: '', max_marks: prev.max_marks || '100' }))
+    }
+
+    const submit = async (event) => {
+        event.preventDefault()
+        if (!form.exam_name.trim() || !form.subject.trim()) {
+            toast.error('Exam and subject are required')
+            return
+        }
+        if (enteredRows.length === 0) {
+            toast.error('Enter marks for at least one student')
+            return
+        }
+        if (invalidIds.size > 0) {
+            toast.error('Fix invalid marks before saving')
+            return
+        }
+
         setSaving(true)
         try {
-            await createMark({
-                ...form,
-                student_id: Number(form.student_id),
-                marks_obtained: Number(form.marks_obtained),
-                max_marks: Number(form.max_marks),
-                grade: form.grade || null,
-                remarks: form.remarks || null,
-            })
-            setForm({ ...form, exam_name: '', marks_obtained: '', grade: '', remarks: '' })
+            // TODO: replace this fan-out with a backend batch endpoint when available.
+            await Promise.all(enteredRows.map((student) => {
+                const marks = Number(marksByStudent[student.profile.id])
+                return createMark({
+                    student_id: Number(student.profile.id),
+                    subject: form.subject.trim(),
+                    exam_name: form.exam_name.trim(),
+                    marks_obtained: marks,
+                    max_marks: maxMarks,
+                    grade: gradeFromPercent(marks, maxMarks),
+                    remarks: null,
+                    exam_date: form.exam_date,
+                }, { notify: false, refresh: false })
+            }))
+            setSaveSummary(`Marks saved for ${enteredRows.length} student${enteredRows.length === 1 ? '' : 's'}`)
+            toast.success(`Marks saved for ${enteredRows.length} student${enteredRows.length === 1 ? '' : 's'}`)
+            setMarksByStudent({})
+            refreshDashboard()
         } catch (err) {
             toast.error(err.message || 'Could not save marks')
         } finally {
@@ -1840,62 +2968,155 @@ const TeacherMarks = ({ dashboard, createMark, studentMap }) => {
 
     return (
         <div className="space-y-6">
-            <h1 className="text-2xl font-black text-slate-950">Marks</h1>
-            <div className="grid gap-6 xl:grid-cols-[400px_1fr]">
-                <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="mb-5 text-lg font-black text-slate-950">Add Marks</h2>
-                    <div className="space-y-4">
-                        <Field label="Student">
+            <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Teacher marks</p>
+                <h1 className="font-display text-3xl font-black text-slate-950">Batch Entry</h1>
+            </div>
+
+            <form onSubmit={submit} className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-5">
+                    <div className="grid gap-3 lg:grid-cols-[1.1fr_1fr_1fr_150px_160px]">
+                        <Field label="Class">
                             <select
-                                value={form.student_id}
-                                onChange={(e) => setForm({ ...form, student_id: e.target.value })}
+                                value={selectedClass}
+                                onChange={(e) => setSelectedClass(e.target.value)}
                                 className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-bold outline-none focus:border-brand-navy-500"
-                                required
                             >
-                                <option value="">Select student</option>
-                                {dashboard.students.map((s) => (
-                                    <option key={s.profile.id} value={s.profile.id}>
-                                        {s.user.full_name} ({s.profile.class_name}-{s.profile.section})
-                                    </option>
+                                {classOptions.map((option) => (
+                                    <option key={option.key} value={option.key}>{option.label} ({option.count})</option>
                                 ))}
                             </select>
                         </Field>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Subject" value={form.subject} onChange={(v) => setForm({ ...form, subject: v })} required />
-                            <Field label="Exam" value={form.exam_name} onChange={(v) => setForm({ ...form, exam_name: v })} required />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Marks" type="number" value={form.marks_obtained} onChange={(v) => setForm({ ...form, marks_obtained: v })} required />
-                            <Field label="Max" type="number" value={form.max_marks} onChange={(v) => setForm({ ...form, max_marks: v })} required />
-                        </div>
-                        <div className="grid grid-cols-2 gap-3">
-                            <Field label="Grade" value={form.grade} onChange={(v) => setForm({ ...form, grade: v })} />
-                            <Field label="Date" type="date" value={form.exam_date} onChange={(v) => setForm({ ...form, exam_date: v })} required />
-                        </div>
-                        <div>
-                            <label className="mb-1.5 block text-xs font-black uppercase tracking-wider text-slate-400">Remarks</label>
-                            <textarea
-                                value={form.remarks}
-                                onChange={(e) => setForm({ ...form, remarks: e.target.value })}
-                                className="min-h-20 w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-bold outline-none focus:border-brand-navy-500"
+                        <Field label="Exam" value={form.exam_name} onChange={(value) => setForm({ ...form, exam_name: value })} required />
+                        <Field label="Subject">
+                            <input
+                                list="teacher-subject-options"
+                                value={form.subject}
+                                onChange={(event) => setForm({ ...form, subject: event.target.value })}
+                                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-bold text-slate-800 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                                required
                             />
+                            <datalist id="teacher-subject-options">
+                                {subjectOptions.map((subject) => <option key={subject} value={subject} />)}
+                            </datalist>
+                        </Field>
+                        <Field label="Max Marks" type="number" value={form.max_marks} onChange={(value) => setForm({ ...form, max_marks: value })} required />
+                        <Field label="Exam Date" type="date" value={form.exam_date} onChange={(value) => setForm({ ...form, exam_date: value })} required />
+                    </div>
+                </div>
+
+                {selectedStudents.length === 0 ? (
+                    <div className="p-6"><EmptyState title="No students in this class" icon={<Users size={32} />} /></div>
+                ) : (
+                    <>
+                        <div className="hidden overflow-x-auto md:block">
+                            <table className="w-full min-w-[720px] text-sm">
+                                <thead>
+                                    <tr className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                                        <th className="px-5 py-3 text-left">Roll</th>
+                                        <th className="px-5 py-3 text-left">Student</th>
+                                        <th className="px-5 py-3 text-left">Marks Obtained</th>
+                                        <th className="px-5 py-3 text-left">Grade</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {selectedStudents.map((student) => {
+                                        const value = marksByStudent[student.profile.id] || ''
+                                        const invalid = invalidIds.has(student.profile.id)
+                                        const numericValue = Number(value)
+                                        return (
+                                            <tr key={student.profile.id} className="hover:bg-slate-50">
+                                                <td className="px-5 py-3 font-mono text-xs font-medium text-slate-500">{student.profile.roll_no || '—'}</td>
+                                                <td className="px-5 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-navy-100 text-xs font-bold text-brand-navy-700">{student.user.full_name?.[0] || '?'}</div>
+                                                        <div>
+                                                            <p className="font-semibold text-slate-950">{student.user.full_name}</p>
+                                                            <p className="text-xs text-slate-500">{student.profile.admission_no}</p>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        max={maxMarks > 0 ? maxMarks : undefined}
+                                                        value={value}
+                                                        onChange={(event) => updateMarks(student.profile.id, event.target.value)}
+                                                        title={invalid ? `Enter a value between 0 and ${maxMarks}` : 'Marks obtained'}
+                                                        className={`w-36 rounded-xl border px-4 py-2.5 text-base font-bold outline-none transition-all focus:ring-4 ${invalid ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-100' : 'border-slate-200 focus:border-brand-navy-500 focus:ring-brand-navy-100'}`}
+                                                    />
+                                                </td>
+                                                <td className="px-5 py-3 font-semibold text-slate-600">
+                                                    {value !== '' && !Number.isNaN(numericValue) && maxMarks > 0 && numericValue <= maxMarks ? gradeFromPercent(numericValue, maxMarks) : '—'}
+                                                </td>
+                                            </tr>
+                                        )
+                                    })}
+                                </tbody>
+                            </table>
                         </div>
+
+                        <div className="space-y-3 p-4 md:hidden">
+                            {selectedStudents.map((student) => {
+                                const value = marksByStudent[student.profile.id] || ''
+                                const invalid = invalidIds.has(student.profile.id)
+                                return (
+                                    <div key={student.profile.id} className="rounded-2xl border border-slate-200 p-4">
+                                        <div className="mb-3 flex items-center gap-3">
+                                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-brand-navy-100 text-sm font-bold text-brand-navy-700">{student.user.full_name?.[0] || '?'}</div>
+                                            <div>
+                                                <p className="font-semibold text-slate-950">{student.user.full_name}</p>
+                                                <p className="text-xs text-slate-500">Roll {student.profile.roll_no || '—'} · {student.profile.admission_no}</p>
+                                            </div>
+                                        </div>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max={maxMarks > 0 ? maxMarks : undefined}
+                                            value={value}
+                                            onChange={(event) => updateMarks(student.profile.id, event.target.value)}
+                                            placeholder={`0-${maxMarks || 100}`}
+                                            title={invalid ? `Enter a value between 0 and ${maxMarks}` : 'Marks obtained'}
+                                            className={`w-full rounded-xl border px-4 py-3 text-lg font-bold outline-none transition-all focus:ring-4 ${invalid ? 'border-rose-400 bg-rose-50 text-rose-700 focus:ring-rose-100' : 'border-slate-200 focus:border-brand-navy-500 focus:ring-brand-navy-100'}`}
+                                        />
+                                    </div>
+                                )
+                            })}
+                        </div>
+                    </>
+                )}
+
+                <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50 p-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+                        <div><p className="text-xs font-medium text-slate-500">Entered</p><p className="font-display text-xl font-bold text-slate-900">{enteredRows.length}</p></div>
+                        <div><p className="text-xs font-medium text-slate-500">Remaining</p><p className="font-display text-xl font-bold text-slate-900">{Math.max(0, selectedStudents.length - enteredRows.length)}</p></div>
+                        <div><p className="text-xs font-medium text-slate-500">Average</p><p className="font-display text-xl font-bold text-slate-900">{validMarks.length ? average : '—'}</p></div>
+                        <div><p className="text-xs font-medium text-slate-500">Median</p><p className="font-display text-xl font-bold text-slate-900">{validMarks.length ? median : '—'}</p></div>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                        {saveSummary && (
+                            <button type="button" onClick={clearForAnotherSubject} className="rounded-xl border border-brand-navy-200 bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy-700 hover:bg-brand-navy-50">
+                                Enter another subject
+                            </button>
+                        )}
                         <button
                             type="submit"
-                            disabled={saving}
-                            className="flex w-full items-center justify-center gap-2 rounded-xl bg-brand-navy-700 py-3.5 text-sm font-black uppercase tracking-widest text-white hover:bg-brand-navy-800 disabled:opacity-60"
+                            disabled={saving || selectedStudents.length === 0}
+                            className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-navy-700 px-5 py-3 text-sm font-semibold text-white hover:bg-brand-navy-800 disabled:opacity-60"
                         >
                             {saving ? <Loader2 className="animate-spin" size={17} /> : <Save size={17} />}
-                            Save Marks
+                            Save all
                         </button>
                     </div>
-                </form>
-                <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-                    <h2 className="mb-4 text-lg font-black text-slate-950">Recorded Marks</h2>
-                    {dashboard.marks.length === 0
-                        ? <EmptyState title="No marks yet" icon={<BookOpen size={32} />} />
-                        : <MarksTable marks={dashboard.marks} studentMap={studentMap} />}
                 </div>
+            </form>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                <h2 className="mb-4 text-lg font-bold text-slate-950">Recorded Marks</h2>
+                {dashboard.marks.length === 0
+                    ? <EmptyState title="No marks yet" icon={<BookOpen size={32} />} />
+                    : <MarksTable marks={dashboard.marks} studentMap={studentMap} />}
             </div>
         </div>
     )
@@ -1963,6 +3184,10 @@ const TeacherAnalytics = ({ apiRequest, dashboard }) => {
     const totalGrades = analytics
         ? Object.values(analytics.grade_distribution).reduce((a, b) => a + b, 0)
         : 0
+    const attendanceRiskCount = analytics
+        ? analytics.needs_attention.filter((s) => s.attendance_count > 0 && s.attendance_percent < 75).length
+        : 0
+    const marksRiskCount = analytics ? analytics.struggling_students.length : 0
 
     const monthLabel = (m) => {
         const [year, month] = m.split('-')
@@ -1996,7 +3221,7 @@ const TeacherAnalytics = ({ apiRequest, dashboard }) => {
             </div>
 
             {!selectedClass && <EmptyState title="Select a class to view analytics" icon={<BarChart2 size={32} />} />}
-            {loading && <div className="flex items-center justify-center p-20"><Loader2 className="animate-spin text-brand-navy-600" size={32} /></div>}
+            {loading && <PanelSkeleton cards={4} />}
 
             {analytics && !loading && (
                 <div className="space-y-6">
@@ -2029,6 +3254,24 @@ const TeacherAnalytics = ({ apiRequest, dashboard }) => {
                             tone={analytics.needs_attention.length > 0 ? 'crimson' : 'slate'}
                             sub={analytics.needs_attention.length > 0 ? 'Low marks or attendance' : 'All on track'}
                         />
+                    </div>
+
+                    <div className="grid gap-3 lg:grid-cols-3">
+                        <div className="rounded-2xl border border-rose-100 bg-white p-5 shadow-sm">
+                            <p className="text-sm font-black text-slate-950">Who is falling behind?</p>
+                            <p className="mt-2 font-display text-3xl font-bold text-rose-700">{marksRiskCount}</p>
+                            <p className="mt-1 text-xs font-medium text-slate-500">Students below the marks threshold</p>
+                        </div>
+                        <div className="rounded-2xl border border-amber-100 bg-white p-5 shadow-sm">
+                            <p className="text-sm font-black text-slate-950">Who is at attendance risk?</p>
+                            <p className="mt-2 font-display text-3xl font-bold text-amber-700">{attendanceRiskCount}</p>
+                            <p className="mt-1 text-xs font-medium text-slate-500">Students below 75% attendance</p>
+                        </div>
+                        <div className="rounded-2xl border border-brand-navy-100 bg-white p-5 shadow-sm">
+                            <p className="text-sm font-black text-slate-950">How is the class doing?</p>
+                            <p className="mt-2 font-display text-3xl font-bold text-brand-navy-700">{analytics.overall_average_percent || 0}%</p>
+                            <p className="mt-1 text-xs font-medium text-slate-500">Class average with {analytics.overall_attendance_percent || 0}% attendance</p>
+                        </div>
                     </div>
 
                     {/* Needs Attention — most actionable, shown first */}
