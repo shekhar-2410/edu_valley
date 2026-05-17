@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, File, Header, HTTPException, UploadFile, status, Response
+from fastapi import FastAPI, Depends, File, Header, HTTPException, Request, UploadFile, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -21,6 +21,13 @@ load_dotenv()
 import models
 import schemas
 from database import SessionLocal, engine
+
+from collections import defaultdict
+from time import time as _time
+
+_contact_rate_limit: dict = defaultdict(list)
+_CONTACT_RATE_LIMIT_WINDOW = 3600  # 1 hour
+_CONTACT_RATE_LIMIT_MAX = 5  # 5 submissions per IP per hour
 
 # Create the database tables on startup
 models.Base.metadata.create_all(bind=engine)
@@ -947,7 +954,15 @@ def get_contacts(status: Optional[str] = None, db: Session = Depends(get_db), ad
 
 @app.post("/contacts", response_model=schemas.Contact)
 @app.post("/api/contacts", response_model=schemas.Contact)
-def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)):
+def create_contact(contact: schemas.ContactCreate, request: Request, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    now = _time()
+    # Prune old timestamps
+    _contact_rate_limit[client_ip] = [t for t in _contact_rate_limit[client_ip] if now - t < _CONTACT_RATE_LIMIT_WINDOW]
+    if len(_contact_rate_limit[client_ip]) >= _CONTACT_RATE_LIMIT_MAX:
+        raise HTTPException(status_code=429, detail="Too many contact submissions. Please try again later.")
+    _contact_rate_limit[client_ip].append(now)
+
     obj = models.Contact(**contact.dict())
     db.add(obj)
     for admin_user in db.query(models.AdminUser).filter(models.AdminUser.is_admin == True).all():
