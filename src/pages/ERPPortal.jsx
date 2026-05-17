@@ -13,6 +13,7 @@ import {
     GraduationCap,
     Home,
     Loader2,
+    Lock,
     LogOut,
     MapPin,
     Menu,
@@ -240,6 +241,79 @@ const Field = ({ label, value, onChange, type = 'text', required = false, childr
     </div>
 )
 
+// ── Change Password Modal ─────────────────────────────────────────────────────
+
+const ChangePasswordModal = ({ isOpen, onClose, apiRequest }) => {
+    const [currentPassword, setCurrentPassword] = useState('')
+    const [newPassword, setNewPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
+    const [saving, setSaving] = useState(false)
+    const [error, setError] = useState('')
+
+    const handleSubmit = async (e) => {
+        e.preventDefault()
+        setError('')
+        if (newPassword.length < 8) {
+            setError('New password must be at least 8 characters')
+            return
+        }
+        if (newPassword !== confirmPassword) {
+            setError('New passwords do not match')
+            return
+        }
+        if (currentPassword === newPassword) {
+            setError('New password must be different from current password')
+            return
+        }
+        setSaving(true)
+        try {
+            await apiRequest(API_ENDPOINTS.erpChangePassword, {
+                method: 'POST',
+                body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+            })
+            toast.success('Password changed successfully')
+            setCurrentPassword('')
+            setNewPassword('')
+            setConfirmPassword('')
+            onClose()
+        } catch (err) {
+            setError(err.message || 'Failed to change password')
+        } finally {
+            setSaving(false)
+        }
+    }
+
+    if (!isOpen) return null
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4" onClick={onClose}>
+            <div className="w-full max-w-md rounded-3xl bg-white p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+                <div className="mb-5 flex items-center justify-between">
+                    <h2 className="text-lg font-bold text-slate-900">Change Password</h2>
+                    <button type="button" onClick={onClose} className="rounded-lg p-1 text-slate-400 hover:bg-slate-100">
+                        <X size={20} />
+                    </button>
+                </div>
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <Field label="Current Password" type="password" value={currentPassword} onChange={setCurrentPassword} required />
+                    <div>
+                        <Field label="New Password" type="password" value={newPassword} onChange={setNewPassword} required />
+                        <p className="mt-1 text-xs text-slate-500">At least 8 characters</p>
+                    </div>
+                    <Field label="Confirm New Password" type="password" value={confirmPassword} onChange={setConfirmPassword} required />
+                    {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-medium text-red-700">{error}</p>}
+                    <div className="flex justify-end gap-2 pt-2">
+                        <button type="button" onClick={onClose} className="rounded-xl px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-100">Cancel</button>
+                        <button type="submit" disabled={saving} className="rounded-xl bg-brand-navy-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-navy-700 disabled:opacity-50">
+                            {saving ? 'Saving…' : 'Change Password'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    )
+}
+
 const loadRazorpay = () =>
     new Promise((resolve) => {
         if (window.Razorpay) { resolve(true); return }
@@ -280,7 +354,7 @@ const guardianNav = [
 
 // ── Sidebar ──────────────────────────────────────────────────────────────────
 
-const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerOpen }) => {
+const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerOpen, onChangePassword }) => {
     const navItems = user?.role === 'teacher' ? teacherNav : user?.role === 'guardian' ? guardianNav : studentNav
     const drawerRef = useRef(null)
 
@@ -333,6 +407,16 @@ const Sidebar = ({ user, activeTab, setActiveTab, logout, drawerOpen, setDrawerO
                         <p className="text-xs font-medium capitalize text-white/50">{user?.role}</p>
                     </div>
                 </div>
+                {onChangePassword && (
+                    <button
+                        type="button"
+                        onClick={() => { onChangePassword(); setDrawerOpen(false) }}
+                        className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                    >
+                        <Lock size={14} />
+                        Change Password
+                    </button>
+                )}
                 <button
                     type="button"
                     onClick={logout}
@@ -440,6 +524,7 @@ const ERPPortal = () => {
     const [shareLoadingId, setShareLoadingId] = useState(null)
     const [busyId, setBusyId] = useState(null)
     const [keyboardOffset, setKeyboardOffset] = useState('0px')
+    const [changePasswordOpen, setChangePasswordOpen] = useState(false)
 
     const token = localStorage.getItem('erpToken')
 
@@ -639,6 +724,7 @@ const ERPPortal = () => {
                 logout={logout}
                 drawerOpen={drawerOpen}
                 setDrawerOpen={setDrawerOpen}
+                onChangePassword={() => setChangePasswordOpen(true)}
             />
 
             <div className="fixed right-6 top-5 z-30 hidden lg:block">
@@ -680,6 +766,12 @@ const ERPPortal = () => {
             <BottomTabs user={user} activeTab={activeTab} setActiveTab={setActiveTab} setDrawerOpen={setDrawerOpen} keyboardOffset={keyboardOffset} />
 
             {receiptData && <ReceiptModal receiptData={receiptData} onClose={() => setReceiptData(null)} />}
+
+            <ChangePasswordModal
+                isOpen={changePasswordOpen}
+                onClose={() => setChangePasswordOpen(false)}
+                apiRequest={apiRequest}
+            />
         </div>
     )
 }
