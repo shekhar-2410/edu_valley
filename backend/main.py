@@ -2191,6 +2191,7 @@ async def upload_image(
     file: UploadFile = File(...),
     thumbnail: Optional[UploadFile] = File(None),
     db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
 ):
     if not file.content_type or not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are allowed")
