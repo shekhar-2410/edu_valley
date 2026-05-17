@@ -1037,18 +1037,31 @@ def delete_announcement(announcement_id: int, db: Session = Depends(get_db), adm
 @app.get("/api/admin/erp/teachers")
 def admin_list_erp_teachers(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
     teachers = db.query(models.ErpUser).filter(models.ErpUser.role == "teacher").order_by(models.ErpUser.full_name).all()
+    teacher_user_ids = [t.id for t in teachers]
+
+    profiles = {p.user_id: p for p in db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id.in_(teacher_user_ids)).all()}
+    profile_ids = [p.id for p in profiles.values()]
+
+    assignments = db.query(models.TeacherSubjectAssignment).filter(models.TeacherSubjectAssignment.teacher_id.in_(profile_ids)).all() if profile_ids else []
+    cs_ids = {a.class_section_id for a in assignments}
+    subj_ids = {a.subject_id for a in assignments}
+
+    class_sections = {cs.id: cs for cs in db.query(models.ClassSection).filter(models.ClassSection.id.in_(cs_ids)).all()} if cs_ids else {}
+    subjects = {s.id: s for s in db.query(models.Subject).filter(models.Subject.id.in_(subj_ids)).all()} if subj_ids else {}
+
+    assignments_by_teacher: dict = {}
+    for a in assignments:
+        assignments_by_teacher.setdefault(a.teacher_id, []).append(a)
+
     result = []
     for t in teachers:
-        profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id == t.id).first()
+        profile = profiles.get(t.id)
         if not profile:
             continue
-        assignments = db.query(models.TeacherSubjectAssignment).filter(
-            models.TeacherSubjectAssignment.teacher_id == profile.id
-        ).all()
         asgn_out = []
-        for a in assignments:
-            cs = db.query(models.ClassSection).filter(models.ClassSection.id == a.class_section_id).first()
-            subj = db.query(models.Subject).filter(models.Subject.id == a.subject_id).first()
+        for a in assignments_by_teacher.get(profile.id, []):
+            cs = class_sections.get(a.class_section_id)
+            subj = subjects.get(a.subject_id)
             asgn_out.append({
                 "id": a.id,
                 "class_section_id": a.class_section_id,
@@ -1216,16 +1229,31 @@ def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(g
     students = db.query(models.StudentProfile).order_by(
         models.StudentProfile.class_name, models.StudentProfile.section, models.StudentProfile.roll_no
     ).all()
+    student_ids = [s.id for s in students]
+    user_ids = [s.user_id for s in students]
+
+    users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()}
+
+    all_invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id.in_(student_ids)).order_by(models.FeeInvoice.due_date).all()
+    invoices_map: dict = {}
+    for inv in all_invoices:
+        invoices_map.setdefault(inv.student_id, []).append(inv)
+
+    all_payments = db.query(models.FeePayment).filter(
+        models.FeePayment.student_id.in_(student_ids),
+        models.FeePayment.status == "paid",
+    ).order_by(models.FeePayment.paid_at.desc()).all()
+    payments_map: dict = {}
+    for p in all_payments:
+        payments_map.setdefault(p.student_id, []).append(p)
+
     result = []
     for s in students:
-        user = db.query(models.ErpUser).filter(models.ErpUser.id == s.user_id).first()
+        user = users.get(s.user_id)
         if not user:
             continue
-        invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == s.id).order_by(models.FeeInvoice.due_date).all()
-        payments = db.query(models.FeePayment).filter(
-            models.FeePayment.student_id == s.id,
-            models.FeePayment.status == "paid",
-        ).order_by(models.FeePayment.paid_at.desc()).all()
+        invoices = invoices_map.get(s.id, [])
+        payments = payments_map.get(s.id, [])
         due = sum(invoice_balance(inv) for inv in invoices)
         result.append({
             "student_id": s.id,
@@ -1239,8 +1267,7 @@ def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(g
                     "id": inv.id, "invoice_no": inv.invoice_no, "title": inv.title,
                     "term": inv.term, "amount_paise": inv.amount_paise,
                     "paid_paise": inv.paid_paise or 0, "due_date": str(inv.due_date),
-                    "status": inv.status,
-                    "balance_paise": invoice_balance(inv),
+                    "status": inv.status, "balance_paise": invoice_balance(inv),
                 }
                 for inv in invoices
             ],
