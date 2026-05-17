@@ -608,11 +608,10 @@ def root():
 @app.get("/api/health")
 def health(db: Session = Depends(get_db)):
     try:
-        from sqlalchemy import text
         db.execute(text("SELECT 1"))
         return {"status": "healthy", "database": "connected"}
-    except Exception as e:
-        return {"status": "unhealthy", "database": "disconnected"}
+    except Exception:
+        raise HTTPException(status_code=503, detail="Database unavailable")
 
 @app.get("/ping")
 @app.get("/api/ping")
