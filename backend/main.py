@@ -2136,7 +2136,7 @@ def verify_razorpay_payment(
     ).first()
     # Idempotency: if this payment is already marked paid, return success without re-processing
     if payment and payment.status == "paid" and payment.razorpay_payment_id == payload.razorpay_payment_id:
-        return {"status": "paid", "payment_id": payment.id, "message": "Payment already verified"}
+        return payment
 
     signed_payload = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8")
     expected_signature = hmac.new(
