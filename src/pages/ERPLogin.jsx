@@ -1,4 +1,4 @@
-import { BookOpen, Lock, Mail, School, ShieldCheck, User, Users } from 'lucide-react'
+import { BookOpen, Lock, Mail, School, Shield, ShieldCheck, User, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../config/api'
@@ -8,23 +8,31 @@ const roleOptions = [
         id: 'student',
         label: 'Student',
         icon: <User size={20} />,
-        email: 'student@nev.edu',
-        password: 'student123',
+        email: '',
+        password: '',
         notes: ['Fee history', 'Marks', 'Leaves', 'Receipts'],
     },
     {
         id: 'teacher',
         label: 'Teacher',
         icon: <Users size={20} />,
-        email: 'teacher@nev.edu',
-        password: 'teacher123',
+        email: '',
+        password: '',
         notes: ['Class overview', 'Leave approvals', 'Marks entry', 'Student records'],
+    },
+    {
+        id: 'guardian',
+        label: 'Guardian',
+        icon: <Shield size={20} />,
+        email: '',
+        password: '',
+        notes: ["Child's fees", 'Attendance', 'Leave status', 'Messages'],
     },
 ]
 
 const ERPLogin = () => {
     const [role, setRole] = useState('student')
-    const [credentials, setCredentials] = useState({ email: 'student@nev.edu', password: 'student123' })
+    const [credentials, setCredentials] = useState({ email: '', password: '' })
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const navigate = useNavigate()
@@ -86,7 +94,7 @@ const ERPLogin = () => {
                                 Secure access for students and teachers of Narendra Edu Valley.
                             </p>
                         </div>
-                        <div className="grid grid-cols-2 gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-2">
+                        <div className="grid grid-cols-3 gap-3 rounded-2xl border border-slate-200 bg-slate-100 p-2">
                             {roleOptions.map((option) => (
                                 <button
                                     key={option.id}
@@ -108,7 +116,7 @@ const ERPLogin = () => {
             </section>
 
             <section className="container grid gap-8 py-10 lg:grid-cols-[1fr_420px] lg:items-start">
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="grid gap-4 md:grid-cols-3">
                     {roleOptions.map((option) => (
                         <button
                             key={option.id}
