@@ -2114,6 +2114,15 @@ def verify_razorpay_payment(
     if not key_secret:
         raise HTTPException(status_code=500, detail="Razorpay secret is not configured")
 
+    payment = db.query(models.FeePayment).filter(
+        models.FeePayment.razorpay_order_id == payload.razorpay_order_id,
+        models.FeePayment.invoice_id == payload.invoice_id,
+        models.FeePayment.student_id == student.id,
+    ).first()
+    # Idempotency: if this payment is already marked paid, return success without re-processing
+    if payment and payment.status == "paid" and payment.razorpay_payment_id == payload.razorpay_payment_id:
+        return {"status": "paid", "payment_id": payment.id, "message": "Payment already verified"}
+
     signed_payload = f"{payload.razorpay_order_id}|{payload.razorpay_payment_id}".encode("utf-8")
     expected_signature = hmac.new(
         key_secret.encode("utf-8"),
