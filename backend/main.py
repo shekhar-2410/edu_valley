@@ -296,6 +296,47 @@ def build_student_summary(student: models.StudentProfile, db: Session) -> schema
         "latest_average_percent": average_percent(marks),
     }
 
+def build_student_summaries_batch(students: list, db: Session) -> list:
+    if not students:
+        return []
+    student_ids = [s.id for s in students]
+    user_ids = [s.user_id for s in students]
+
+    users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()}
+
+    all_invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id.in_(student_ids)).all()
+    invoices_map: dict = {}
+    for inv in all_invoices:
+        invoices_map.setdefault(inv.student_id, []).append(inv)
+
+    all_marks = db.query(models.MarkEntry).filter(models.MarkEntry.student_id.in_(student_ids)).all()
+    marks_map: dict = {}
+    for m in all_marks:
+        marks_map.setdefault(m.student_id, []).append(m)
+
+    all_attendance = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id.in_(student_ids)).all()
+    attendance_map: dict = {}
+    for rec in all_attendance:
+        attendance_map.setdefault(rec.student_id, []).append(rec)
+
+    result = []
+    for student in students:
+        user = users.get(student.user_id)
+        if not user:
+            continue
+        invoices = invoices_map.get(student.id, [])
+        marks = marks_map.get(student.id, [])
+        attendance = attendance_map.get(student.id, [])
+        fee_due = sum(invoice_balance(inv) for inv in invoices)
+        result.append({
+            "user": user,
+            "profile": student,
+            "fee_due_paise": fee_due,
+            "attendance_percent": attendance_percent(attendance),
+            "latest_average_percent": average_percent(marks),
+        })
+    return result
+
 # Temporary Setup Route to seed Admin Data on Render
 @app.get("/setup-db")
 @app.get("/api/setup-db")
@@ -1547,7 +1588,7 @@ def get_teacher_dashboard(
     leaves = db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
     marks = db.query(models.MarkEntry).order_by(models.MarkEntry.exam_date.desc()).all()
 
-    student_summaries = [build_student_summary(s, db) for s in students]
+    student_summaries = build_student_summaries_batch(students, db)
 
     needs_attention_count = sum(
         1 for ss in student_summaries
