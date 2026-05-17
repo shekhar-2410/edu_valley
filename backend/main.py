@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Response
+from fastapi import FastAPI, Depends, File, Header, HTTPException, UploadFile, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -6,11 +6,13 @@ from datetime import date, datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import inspect, text
 import base64
 import hashlib
 import hmac
 import json
 import os
+import secrets
 import urllib.error
 import urllib.request
 from dotenv import load_dotenv
@@ -22,6 +24,34 @@ from database import SessionLocal, engine
 
 # Create the database tables on startup
 models.Base.metadata.create_all(bind=engine)
+
+def ensure_lightweight_migrations():
+    inspector = inspect(engine)
+    table_names = set(inspector.get_table_names())
+    if "contacts" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("contacts")}
+        with engine.begin() as connection:
+            if "status" not in columns:
+                connection.execute(text("ALTER TABLE contacts ADD COLUMN status VARCHAR(20) DEFAULT 'new'"))
+            if "read" not in columns:
+                connection.execute(text("ALTER TABLE contacts ADD COLUMN read BOOLEAN DEFAULT false"))
+    for table_name in ("events", "faculty", "gallery_images", "announcements"):
+        if table_name not in table_names:
+            continue
+        columns = {column["name"] for column in inspector.get_columns(table_name)}
+        if "deleted_at" in columns:
+            continue
+        with engine.begin() as connection:
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN deleted_at DATETIME"))
+    if "stored_images" in table_names:
+        columns = {column["name"] for column in inspector.get_columns("stored_images")}
+        with engine.begin() as connection:
+            if "thumbnail_content_type" not in columns:
+                connection.execute(text("ALTER TABLE stored_images ADD COLUMN thumbnail_content_type VARCHAR(50)"))
+            if "thumbnail_data" not in columns:
+                connection.execute(text("ALTER TABLE stored_images ADD COLUMN thumbnail_data BLOB"))
+
+ensure_lightweight_migrations()
 
 app = FastAPI(title="School Management API")
 
@@ -100,6 +130,96 @@ def average_percent(marks: List[models.MarkEntry]) -> float:
         return 0.0
     return round(sum(percentages) / len(percentages), 1)
 
+def model_snapshot(obj, fields: Optional[List[str]] = None):
+    if not obj:
+        return None
+    keys = fields or [column.name for column in obj.__table__.columns]
+    snapshot = {}
+    for key in keys:
+        value = getattr(obj, key, None)
+        if isinstance(value, (datetime, date)):
+            value = value.isoformat()
+        snapshot[key] = value
+    return snapshot
+
+def create_audit_log(
+    db: Session,
+    actor_kind: str,
+    actor_email: Optional[str],
+    action: str,
+    entity_type: str,
+    entity_id: Optional[str] = None,
+    before=None,
+    after=None,
+):
+    db.add(models.AuditLog(
+        actor_kind=actor_kind,
+        actor_email=actor_email,
+        action=action,
+        entity_type=entity_type,
+        entity_id=str(entity_id) if entity_id is not None else None,
+        before_json=json.dumps(before, default=str) if before is not None else None,
+        after_json=json.dumps(after, default=str) if after is not None else None,
+    ))
+
+def create_notification(
+    db: Session,
+    recipient_kind: str,
+    recipient_id: int,
+    title: str,
+    body: Optional[str] = None,
+    type_: str = "info",
+    link: Optional[str] = None,
+):
+    db.add(models.Notification(
+        recipient_kind=recipient_kind,
+        recipient_id=recipient_id,
+        title=title,
+        body=body,
+        type=type_,
+        link=link,
+    ))
+
+def get_guardian_student_ids(user: models.ErpUser, db: Session) -> List[int]:
+    if user.role != "guardian":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Guardian access required")
+    return [
+        link.student_id
+        for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.guardian_user_id == user.id).all()
+    ]
+
+def ensure_guardian_link(db: Session, student: models.StudentProfile) -> Optional[dict]:
+    phone = "".join(ch for ch in (student.guardian_phone or "") if ch.isdigit())
+    if not phone:
+        return None
+    guardian_email = f"guardian+{phone}@nev.local"
+    guardian_user = db.query(models.ErpUser).filter(models.ErpUser.email == guardian_email).first()
+    generated_password = None
+    if not guardian_user:
+        generated_password = secrets.token_urlsafe(10)
+        guardian_user = models.ErpUser(
+            email=guardian_email,
+            hashed_password=pwd_context.hash(generated_password),
+            role="guardian",
+            full_name=student.guardian_name or f"Guardian {phone[-4:]}",
+            phone=student.guardian_phone,
+        )
+        db.add(guardian_user)
+        db.flush()
+    existing = db.query(models.GuardianStudent).filter(
+        models.GuardianStudent.guardian_user_id == guardian_user.id,
+        models.GuardianStudent.student_id == student.id,
+    ).first()
+    if not existing:
+        db.add(models.GuardianStudent(
+            guardian_user_id=guardian_user.id,
+            student_id=student.id,
+            relationship="guardian",
+        ))
+    if generated_password:
+        return {"email": guardian_user.email, "password": generated_password}
+    return {"email": guardian_user.email, "password": None}
+
 async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
@@ -111,6 +231,22 @@ async def get_current_admin(token: str = Depends(oauth2_scheme), db: Session = D
     user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
     if not user or not user.is_admin:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
+    return user
+
+def require_admin_authorization(authorization: Optional[str], db: Session):
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin authorization required")
+    token = authorization.split(" ", 1)[1]
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        email = payload.get("sub")
+        if not email:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin authorization required")
+    except JWTError:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin authorization required")
+    user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+    if not user or not user.is_admin:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Admin authorization required")
     return user
 
 async def get_current_erp_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
@@ -161,13 +297,24 @@ def build_student_summary(student: models.StudentProfile, db: Session) -> schema
 @app.get("/setup-db")
 @app.get("/api/setup-db")
 def setup_db(db: Session = Depends(get_db)):
+    if os.getenv("ALLOW_DEMO_SETUP", "").lower() != "true":
+        raise HTTPException(
+            status_code=403,
+            detail="Demo setup is disabled. Set ALLOW_DEMO_SETUP=true and explicit DEMO_*_PASSWORD values in a non-production environment.",
+        )
+    admin_password = os.getenv("DEMO_ADMIN_PASSWORD")
+    teacher_password = os.getenv("DEMO_TEACHER_PASSWORD")
+    student_password = os.getenv("DEMO_STUDENT_PASSWORD")
+    if not all([admin_password, teacher_password, student_password]):
+        raise HTTPException(status_code=400, detail="DEMO_ADMIN_PASSWORD, DEMO_TEACHER_PASSWORD, and DEMO_STUDENT_PASSWORD are required")
+
     created = []
 
     admin = db.query(models.AdminUser).filter(models.AdminUser.email == "admin@nev.edu").first()
     if not admin:
         db.add(models.AdminUser(
             email="admin@nev.edu",
-            hashed_password=pwd_context.hash("admin123"),
+            hashed_password=pwd_context.hash(admin_password),
             is_admin=True,
         ))
         created.append("admin")
@@ -176,7 +323,7 @@ def setup_db(db: Session = Depends(get_db)):
     if not teacher_user:
         teacher_user = models.ErpUser(
             email="teacher@nev.edu",
-            hashed_password=pwd_context.hash("teacher123"),
+            hashed_password=pwd_context.hash(teacher_password),
             role="teacher",
             full_name="Anita Sharma",
             phone="9876543210",
@@ -202,7 +349,7 @@ def setup_db(db: Session = Depends(get_db)):
     if not student_user:
         student_user = models.ErpUser(
             email="student@nev.edu",
-            hashed_password=pwd_context.hash("student123"),
+            hashed_password=pwd_context.hash(student_password),
             role="student",
             full_name="Aarav Kumar",
             phone="9123456780",
@@ -445,11 +592,7 @@ def setup_db(db: Session = Depends(get_db)):
     return {
         "message": "Database tables created and sample accounts are ready.",
         "created": created,
-        "demo_accounts": {
-            "admin": "admin@nev.edu / admin123",
-            "student": "student@nev.edu / student123",
-            "teacher": "teacher@nev.edu / teacher123",
-        },
+        "demo_accounts": ["admin@nev.edu", "student@nev.edu", "teacher@nev.edu"],
     }
 
 # Basic Routes
@@ -472,6 +615,49 @@ def health(db: Session = Depends(get_db)):
 @app.get("/api/ping")
 def ping():
     return {"message": "pong"}
+
+@app.get("/admin/activity", response_model=List[schemas.AuditLogOut])
+@app.get("/api/admin/activity", response_model=List[schemas.AuditLogOut])
+def get_admin_activity(
+    limit: int = 100,
+    entity_type: Optional[str] = None,
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    query = db.query(models.AuditLog)
+    if entity_type:
+        query = query.filter(models.AuditLog.entity_type == entity_type)
+    return query.order_by(models.AuditLog.created_at.desc()).limit(min(limit, 250)).all()
+
+@app.get("/admin/notifications", response_model=List[schemas.NotificationOut])
+@app.get("/api/admin/notifications", response_model=List[schemas.NotificationOut])
+def get_admin_notifications(
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    return db.query(models.Notification).filter(
+        models.Notification.recipient_kind == "admin",
+        models.Notification.recipient_id == admin.id,
+    ).order_by(models.Notification.created_at.desc()).limit(100).all()
+
+@app.patch("/admin/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
+@app.patch("/api/admin/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
+def mark_admin_notification_read(
+    notification_id: int,
+    db: Session = Depends(get_db),
+    admin=Depends(get_current_admin),
+):
+    obj = db.query(models.Notification).filter(
+        models.Notification.id == notification_id,
+        models.Notification.recipient_kind == "admin",
+        models.Notification.recipient_id == admin.id,
+    ).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    obj.read = True
+    db.commit()
+    db.refresh(obj)
+    return obj
 
 # Auth
 @app.post("/auth/login", response_model=schemas.Token)
@@ -502,11 +688,31 @@ def erp_login(data: schemas.LoginRequest, db: Session = Depends(get_db)):
     )
     return {"access_token": token, "token_type": "bearer", "user": user}
 
+def update_model_from_schema(obj, payload):
+    for key, value in payload.dict().items():
+        setattr(obj, key, value)
+    return obj
+
+def active_or_trash(query, model, trash: bool):
+    return query.filter(model.deleted_at.isnot(None) if trash else model.deleted_at.is_(None))
+
+def soft_delete(obj, db: Session):
+    obj.deleted_at = datetime.now(timezone.utc)
+    db.commit()
+
+def restore_deleted(obj, db: Session):
+    obj.deleted_at = None
+    db.commit()
+    db.refresh(obj)
+    return obj
+
 # News & Events
 @app.get("/events", response_model=List[schemas.Event])
 @app.get("/api/events", response_model=List[schemas.Event])
-def get_events(db: Session = Depends(get_db)):
-    items = db.query(models.Event).order_by(models.Event.date.desc()).all()
+def get_events(trash: bool = False, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if trash:
+        require_admin_authorization(authorization, db)
+    items = active_or_trash(db.query(models.Event), models.Event, trash).order_by(models.Event.date.desc()).all()
     for item in items:
         item.image_url = fix_image_url(item.image_url)
     return items
@@ -518,23 +724,54 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admi
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "create", "event", obj.id, after=model_snapshot(obj))
+    db.commit()
     return obj
+
+@app.put("/events/{event_id}", response_model=schemas.Event)
+@app.put("/api/events/{event_id}", response_model=schemas.Event)
+def update_event(event_id: int, event: schemas.EventCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Event).filter(models.Event.id == event_id, models.Event.deleted_at.is_(None)).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Event not found")
+    before = model_snapshot(obj)
+    update_model_from_schema(obj, event)
+    db.commit()
+    db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "update", "event", obj.id, before=before, after=model_snapshot(obj))
+    db.commit()
+    return obj
+
+@app.patch("/events/{event_id}/restore", response_model=schemas.Event)
+@app.patch("/api/events/{event_id}/restore", response_model=schemas.Event)
+def restore_event(event_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Event).filter(models.Event.id == event_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Event not found")
+    restored = restore_deleted(obj, db)
+    create_audit_log(db, "admin", admin.email, "restore", "event", obj.id, before={"deleted_at": "set"}, after=model_snapshot(obj))
+    db.commit()
+    return restored
 
 @app.delete("/events/{event_id}")
 @app.delete("/api/events/{event_id}")
 def delete_event(event_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    obj = db.query(models.Event).filter(models.Event.id == event_id).first()
+    obj = db.query(models.Event).filter(models.Event.id == event_id, models.Event.deleted_at.is_(None)).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Event not found")
-    db.delete(obj)
+    before = model_snapshot(obj)
+    soft_delete(obj, db)
+    create_audit_log(db, "admin", admin.email, "delete", "event", obj.id, before=before, after={"deleted_at": obj.deleted_at.isoformat() if obj.deleted_at else None})
     db.commit()
     return {"detail": "Event deleted"}
 
 # Faculty
 @app.get("/faculty", response_model=List[schemas.Faculty])
 @app.get("/api/faculty", response_model=List[schemas.Faculty])
-def get_faculty(db: Session = Depends(get_db)):
-    items = db.query(models.Faculty).all()
+def get_faculty(trash: bool = False, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if trash:
+        require_admin_authorization(authorization, db)
+    items = active_or_trash(db.query(models.Faculty), models.Faculty, trash).order_by(models.Faculty.created_at.desc()).all()
     for item in items:
         item.image_url = fix_image_url(item.image_url)
     return items
@@ -546,23 +783,54 @@ def create_faculty(faculty: schemas.FacultyCreate, db: Session = Depends(get_db)
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "create", "faculty", obj.id, after=model_snapshot(obj))
+    db.commit()
     return obj
+
+@app.put("/faculty/{faculty_id}", response_model=schemas.Faculty)
+@app.put("/api/faculty/{faculty_id}", response_model=schemas.Faculty)
+def update_faculty(faculty_id: int, faculty: schemas.FacultyCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Faculty).filter(models.Faculty.id == faculty_id, models.Faculty.deleted_at.is_(None)).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    before = model_snapshot(obj)
+    update_model_from_schema(obj, faculty)
+    db.commit()
+    db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "update", "faculty", obj.id, before=before, after=model_snapshot(obj))
+    db.commit()
+    return obj
+
+@app.patch("/faculty/{faculty_id}/restore", response_model=schemas.Faculty)
+@app.patch("/api/faculty/{faculty_id}/restore", response_model=schemas.Faculty)
+def restore_faculty(faculty_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Faculty not found")
+    restored = restore_deleted(obj, db)
+    create_audit_log(db, "admin", admin.email, "restore", "faculty", obj.id, before={"deleted_at": "set"}, after=model_snapshot(obj))
+    db.commit()
+    return restored
 
 @app.delete("/faculty/{faculty_id}")
 @app.delete("/api/faculty/{faculty_id}")
 def delete_faculty(faculty_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    obj = db.query(models.Faculty).filter(models.Faculty.id == faculty_id).first()
+    obj = db.query(models.Faculty).filter(models.Faculty.id == faculty_id, models.Faculty.deleted_at.is_(None)).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Faculty not found")
-    db.delete(obj)
+    before = model_snapshot(obj)
+    soft_delete(obj, db)
+    create_audit_log(db, "admin", admin.email, "delete", "faculty", obj.id, before=before, after={"deleted_at": obj.deleted_at.isoformat() if obj.deleted_at else None})
     db.commit()
     return {"detail": "Faculty deleted"}
 
 # Gallery
 @app.get("/gallery", response_model=List[schemas.GalleryImage])
 @app.get("/api/gallery", response_model=List[schemas.GalleryImage])
-def get_gallery(db: Session = Depends(get_db)):
-    items = db.query(models.GalleryImage).all()
+def get_gallery(trash: bool = False, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if trash:
+        require_admin_authorization(authorization, db)
+    items = active_or_trash(db.query(models.GalleryImage), models.GalleryImage, trash).order_by(models.GalleryImage.created_at.desc()).all()
     for item in items:
         item.image_url = fix_image_url(item.image_url)
     return items
@@ -574,31 +842,82 @@ def create_gallery(image: schemas.GalleryImageCreate, db: Session = Depends(get_
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "create", "gallery_image", obj.id, after=model_snapshot(obj))
+    db.commit()
     return obj
+
+@app.put("/gallery/{image_id}", response_model=schemas.GalleryImage)
+@app.put("/api/gallery/{image_id}", response_model=schemas.GalleryImage)
+def update_gallery(image_id: int, image: schemas.GalleryImageCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id, models.GalleryImage.deleted_at.is_(None)).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Gallery image not found")
+    before = model_snapshot(obj)
+    update_model_from_schema(obj, image)
+    db.commit()
+    db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "update", "gallery_image", obj.id, before=before, after=model_snapshot(obj))
+    db.commit()
+    return obj
+
+@app.patch("/gallery/{image_id}/restore", response_model=schemas.GalleryImage)
+@app.patch("/api/gallery/{image_id}/restore", response_model=schemas.GalleryImage)
+def restore_gallery(image_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Gallery image not found")
+    restored = restore_deleted(obj, db)
+    create_audit_log(db, "admin", admin.email, "restore", "gallery_image", obj.id, before={"deleted_at": "set"}, after=model_snapshot(obj))
+    db.commit()
+    return restored
 
 @app.delete("/gallery/{image_id}")
 @app.delete("/api/gallery/{image_id}")
 def delete_gallery(image_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    obj = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id).first()
+    obj = db.query(models.GalleryImage).filter(models.GalleryImage.id == image_id, models.GalleryImage.deleted_at.is_(None)).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Gallery image not found")
-    db.delete(obj)
+    before = model_snapshot(obj)
+    soft_delete(obj, db)
+    create_audit_log(db, "admin", admin.email, "delete", "gallery_image", obj.id, before=before, after={"deleted_at": obj.deleted_at.isoformat() if obj.deleted_at else None})
     db.commit()
     return {"detail": "Gallery image deleted"}
 
 # Contacts
 @app.get("/contacts", response_model=List[schemas.Contact])
 @app.get("/api/contacts", response_model=List[schemas.Contact])
-def get_contacts(db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    return db.query(models.Contact).order_by(models.Contact.created_at.desc()).all()
+def get_contacts(status: Optional[str] = None, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    query = db.query(models.Contact)
+    if status:
+        query = query.filter(models.Contact.status == status)
+    return query.order_by(models.Contact.created_at.desc()).all()
 
 @app.post("/contacts", response_model=schemas.Contact)
 @app.post("/api/contacts", response_model=schemas.Contact)
 def create_contact(contact: schemas.ContactCreate, db: Session = Depends(get_db)):
     obj = models.Contact(**contact.dict())
     db.add(obj)
+    for admin_user in db.query(models.AdminUser).filter(models.AdminUser.is_admin == True).all():
+        create_notification(db, "admin", admin_user.id, "New contact message", contact.subject, "message", "/admin/website/messages")
     db.commit()
     db.refresh(obj)
+    return obj
+
+@app.patch("/contacts/{contact_id}", response_model=schemas.Contact)
+@app.patch("/api/contacts/{contact_id}", response_model=schemas.Contact)
+def update_contact(contact_id: int, payload: schemas.ContactUpdate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Contact not found")
+    before = model_snapshot(obj)
+    if payload.status is not None:
+        obj.status = payload.status
+    if payload.read is not None:
+        obj.read = payload.read
+    db.commit()
+    db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "update", "contact", obj.id, before=before, after=model_snapshot(obj))
+    db.commit()
     return obj
 
 @app.delete("/contacts/{contact_id}")
@@ -607,15 +926,19 @@ def delete_contact(contact_id: int, db: Session = Depends(get_db), admin=Depends
     obj = db.query(models.Contact).filter(models.Contact.id == contact_id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Contact not found")
+    before = model_snapshot(obj)
     db.delete(obj)
+    create_audit_log(db, "admin", admin.email, "delete", "contact", contact_id, before=before)
     db.commit()
     return {"detail": "Contact deleted"}
 
 # Announcements
 @app.get("/announcements", response_model=List[schemas.Announcement])
 @app.get("/api/announcements", response_model=List[schemas.Announcement])
-def get_announcements(db: Session = Depends(get_db)):
-    return db.query(models.Announcement).order_by(models.Announcement.created_at.desc()).all()
+def get_announcements(trash: bool = False, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    if trash:
+        require_admin_authorization(authorization, db)
+    return active_or_trash(db.query(models.Announcement), models.Announcement, trash).order_by(models.Announcement.created_at.desc()).all()
 
 @app.post("/announcements", response_model=schemas.Announcement)
 @app.post("/api/announcements", response_model=schemas.Announcement)
@@ -624,15 +947,44 @@ def create_announcement(announcement: schemas.AnnouncementCreate, db: Session = 
     db.add(obj)
     db.commit()
     db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "create", "announcement", obj.id, after=model_snapshot(obj))
+    db.commit()
     return obj
+
+@app.put("/announcements/{announcement_id}", response_model=schemas.Announcement)
+@app.put("/api/announcements/{announcement_id}", response_model=schemas.Announcement)
+def update_announcement(announcement_id: int, announcement: schemas.AnnouncementCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Announcement).filter(models.Announcement.id == announcement_id, models.Announcement.deleted_at.is_(None)).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    before = model_snapshot(obj)
+    update_model_from_schema(obj, announcement)
+    db.commit()
+    db.refresh(obj)
+    create_audit_log(db, "admin", admin.email, "update", "announcement", obj.id, before=before, after=model_snapshot(obj))
+    db.commit()
+    return obj
+
+@app.patch("/announcements/{announcement_id}/restore", response_model=schemas.Announcement)
+@app.patch("/api/announcements/{announcement_id}/restore", response_model=schemas.Announcement)
+def restore_announcement(announcement_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
+    obj = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    restored = restore_deleted(obj, db)
+    create_audit_log(db, "admin", admin.email, "restore", "announcement", obj.id, before={"deleted_at": "set"}, after=model_snapshot(obj))
+    db.commit()
+    return restored
 
 @app.delete("/announcements/{announcement_id}")
 @app.delete("/api/announcements/{announcement_id}")
 def delete_announcement(announcement_id: int, db: Session = Depends(get_db), admin=Depends(get_current_admin)):
-    obj = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
+    obj = db.query(models.Announcement).filter(models.Announcement.id == announcement_id, models.Announcement.deleted_at.is_(None)).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Announcement not found")
-    db.delete(obj)
+    before = model_snapshot(obj)
+    soft_delete(obj, db)
+    create_audit_log(db, "admin", admin.email, "delete", "announcement", obj.id, before=before, after={"deleted_at": obj.deleted_at.isoformat() if obj.deleted_at else None})
     db.commit()
     return {"detail": "Announcement deleted"}
 
@@ -676,9 +1028,10 @@ def admin_list_erp_teachers(admin=Depends(get_current_admin), db: Session = Depe
 def admin_create_erp_teacher(payload: schemas.AdminCreateTeacher, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
     if db.query(models.ErpUser).filter(models.ErpUser.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
+    initial_password = payload.password or secrets.token_urlsafe(10)
     user = models.ErpUser(
         email=payload.email,
-        hashed_password=pwd_context.hash(payload.password or "teacher123"),
+        hashed_password=pwd_context.hash(initial_password),
         role="teacher",
         full_name=payload.full_name,
         phone=payload.phone,
@@ -697,7 +1050,7 @@ def admin_create_erp_teacher(payload: schemas.AdminCreateTeacher, admin=Depends(
     db.add(profile)
     db.commit()
     db.refresh(user)
-    return {"message": "Teacher created", "email": user.email, "default_password": payload.password or "teacher123"}
+    return {"message": "Teacher created", "email": user.email, "default_password": initial_password}
 
 
 @app.post("/admin/erp/teacher-assignments")
@@ -808,6 +1161,12 @@ def admin_fee_summary(admin=Depends(get_current_admin), db: Session = Depends(ge
     }
 
 
+@app.get("/admin/erp/leaves", response_model=List[schemas.LeaveRequestOut])
+@app.get("/api/admin/erp/leaves", response_model=List[schemas.LeaveRequestOut])
+def admin_list_leave_requests(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    return db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
+
+
 @app.get("/admin/erp/fees/students")
 @app.get("/api/admin/erp/fees/students")
 def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
@@ -872,6 +1231,12 @@ def admin_create_invoice(payload: schemas.AdminCreateInvoice, admin=Depends(get_
         status="pending",
     )
     db.add(inv)
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
+    if student_user:
+        create_notification(db, "erp", student_user.id, "Fee invoice assigned", f"{payload.title} is due on {payload.due_date}.", "fee", "/erp")
+    for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+        create_notification(db, "erp", link.guardian_user_id, "Fee invoice assigned", f"{payload.title} is due on {payload.due_date}.", "fee", "/erp")
+    create_audit_log(db, "admin", admin.email, "create", "fee_invoice", invoice_no, after=model_snapshot(inv))
     db.commit()
     db.refresh(inv)
     return {
@@ -904,6 +1269,12 @@ def admin_manual_payment(payload: schemas.AdminManualPayment, admin=Depends(get_
     payment.receipt_no = generate_receipt_no(payment.id)
     invoice.paid_paise = (invoice.paid_paise or 0) + amount
     sync_invoice_status(invoice)
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == invoice.student_id).first()
+    if student:
+        create_notification(db, "erp", student.user_id, "Payment recorded", f"{payment.receipt_no} for {amount / 100:.0f} INR was recorded.", "fee", "/erp")
+        for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+            create_notification(db, "erp", link.guardian_user_id, "Payment recorded", f"{payment.receipt_no} was recorded.", "fee", "/erp")
+    create_audit_log(db, "admin", admin.email, "create", "fee_payment", payment.id, after=model_snapshot(payment))
     db.commit()
     db.refresh(payment)
     return {
@@ -1024,6 +1395,42 @@ def get_student_dashboard(
     attendance = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.student_id == profile.id
     ).order_by(models.AttendanceRecord.date.desc()).all()
+    class_students_query = db.query(models.StudentProfile)
+    if profile.class_section_id:
+        class_students_query = class_students_query.filter(models.StudentProfile.class_section_id == profile.class_section_id)
+    else:
+        class_students_query = class_students_query.filter(
+            models.StudentProfile.class_name == profile.class_name,
+            models.StudentProfile.section == profile.section,
+        )
+    class_student_ids = [student.id for student in class_students_query.all()]
+    mark_comparisons = {}
+    for mark in marks:
+        peer_marks = db.query(models.MarkEntry).filter(
+            models.MarkEntry.student_id.in_(class_student_ids),
+            models.MarkEntry.exam_name == mark.exam_name,
+            models.MarkEntry.subject == mark.subject,
+            models.MarkEntry.max_marks == mark.max_marks,
+        ).all()
+        peer_percents = sorted([
+            round((peer.marks_obtained / peer.max_marks) * 100, 2)
+            for peer in peer_marks
+            if peer.max_marks
+        ])
+        own_percent = round((mark.marks_obtained / mark.max_marks) * 100, 2) if mark.max_marks else 0
+        if peer_percents:
+            below_or_equal = len([pct for pct in peer_percents if pct <= own_percent])
+            percentile = round((below_or_equal / len(peer_percents)) * 100)
+            class_average = round(sum(peer_percents) / len(peer_percents), 1)
+        else:
+            percentile = None
+            class_average = None
+        mark_comparisons[mark.id] = {
+            "class_average_percent": class_average,
+            "percentile": percentile,
+            "peer_count": len(peer_percents),
+            "rank_band": "top quartile" if percentile and percentile >= 75 else "middle" if percentile and percentile >= 40 else "needs focus" if percentile is not None else None,
+        }
     fee_due = sum(invoice_balance(invoice) for invoice in invoices)
     stats = {
         "fee_due_paise": fee_due,
@@ -1033,6 +1440,7 @@ def get_student_dashboard(
         "attendance_percent": attendance_percent(attendance),
         "average_percent": average_percent(marks),
         "receipt_count": len(payments),
+        "mark_comparisons": mark_comparisons,
     }
     return {
         "user": user,
@@ -1043,6 +1451,49 @@ def get_student_dashboard(
         "marks": marks,
         "attendance": attendance,
         "stats": stats,
+    }
+
+@app.get("/erp/guardian/dashboard", response_model=schemas.GuardianDashboard)
+@app.get("/api/erp/guardian/dashboard", response_model=schemas.GuardianDashboard)
+def get_guardian_dashboard(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    student_ids = get_guardian_student_ids(user, db)
+    children = []
+    total_due = 0
+    for student_id in student_ids:
+        student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+        if not student:
+            continue
+        summary = build_student_summary(student, db)
+        pending_leaves = db.query(models.LeaveRequest).filter(
+            models.LeaveRequest.student_id == student.id,
+            models.LeaveRequest.status == "pending",
+        ).count()
+        unread_threads = db.query(models.MessageThread).filter(
+            models.MessageThread.student_id == student.id,
+            models.MessageThread.guardian_user_id == user.id,
+            models.MessageThread.status == "open",
+        ).count()
+        total_due += summary["fee_due_paise"]
+        children.append({
+            **summary,
+            "pending_leaves": pending_leaves,
+            "unread_threads": unread_threads,
+        })
+    return {
+        "user": user,
+        "children": children,
+        "stats": {
+            "child_count": len(children),
+            "fee_due_paise": total_due,
+            "notifications_unread": db.query(models.Notification).filter(
+                models.Notification.recipient_kind == "erp",
+                models.Notification.recipient_id == user.id,
+                models.Notification.read == False,
+            ).count(),
+        },
     }
 
 @app.get("/erp/teacher/dashboard", response_model=schemas.TeacherDashboard)
@@ -1137,6 +1588,251 @@ def get_teacher_dashboard(
         "stats": stats,
     }
 
+@app.get("/erp/notifications", response_model=List[schemas.NotificationOut])
+@app.get("/api/erp/notifications", response_model=List[schemas.NotificationOut])
+def get_erp_notifications(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    return db.query(models.Notification).filter(
+        models.Notification.recipient_kind == "erp",
+        models.Notification.recipient_id == user.id,
+    ).order_by(models.Notification.created_at.desc()).limit(100).all()
+
+@app.patch("/erp/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
+@app.patch("/api/erp/notifications/{notification_id}/read", response_model=schemas.NotificationOut)
+def mark_erp_notification_read(
+    notification_id: int,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    obj = db.query(models.Notification).filter(
+        models.Notification.id == notification_id,
+        models.Notification.recipient_kind == "erp",
+        models.Notification.recipient_id == user.id,
+    ).first()
+    if not obj:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    obj.read = True
+    db.commit()
+    db.refresh(obj)
+    return obj
+
+def serialize_message_thread(thread: models.MessageThread, db: Session):
+    messages = db.query(models.ThreadMessage).filter(
+        models.ThreadMessage.thread_id == thread.id
+    ).order_by(models.ThreadMessage.created_at.asc()).all()
+    sender_ids = {message.sender_user_id for message in messages}
+    senders = {
+        user.id: user.full_name
+        for user in db.query(models.ErpUser).filter(models.ErpUser.id.in_(list(sender_ids))).all()
+    } if sender_ids else {}
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == thread.student_id).first()
+    return {
+        "id": thread.id,
+        "student_id": thread.student_id,
+        "teacher_id": thread.teacher_id,
+        "guardian_user_id": thread.guardian_user_id,
+        "subject": thread.subject,
+        "status": thread.status,
+        "created_at": thread.created_at,
+        "updated_at": thread.updated_at,
+        "student": build_student_summary(student, db) if student else None,
+        "messages": [
+            {
+                "id": message.id,
+                "thread_id": message.thread_id,
+                "sender_user_id": message.sender_user_id,
+                "sender_role": message.sender_role,
+                "body": message.body,
+                "created_at": message.created_at,
+                "sender_name": senders.get(message.sender_user_id),
+            }
+            for message in messages
+        ],
+    }
+
+def find_class_teacher_for_student(student: models.StudentProfile, db: Session) -> Optional[models.TeacherProfile]:
+    if student.class_section_id:
+        assignment = db.query(models.TeacherSubjectAssignment).filter(
+            models.TeacherSubjectAssignment.class_section_id == student.class_section_id,
+            models.TeacherSubjectAssignment.is_class_teacher == True,
+        ).first()
+        if assignment:
+            return db.query(models.TeacherProfile).filter(models.TeacherProfile.id == assignment.teacher_id).first()
+    return db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.class_teacher_of == f"Class {student.class_name} {student.section}"
+    ).first() or db.query(models.TeacherProfile).first()
+
+@app.get("/erp/messages", response_model=List[schemas.MessageThreadOut])
+@app.get("/api/erp/messages", response_model=List[schemas.MessageThreadOut])
+def list_message_threads(
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if user.role == "guardian":
+        threads = db.query(models.MessageThread).filter(
+            models.MessageThread.guardian_user_id == user.id
+        ).order_by(models.MessageThread.updated_at.desc()).all()
+    elif user.role == "teacher":
+        teacher = get_teacher_profile_for_user(user, db)
+        threads = db.query(models.MessageThread).filter(
+            models.MessageThread.teacher_id == teacher.id
+        ).order_by(models.MessageThread.updated_at.desc()).all()
+    else:
+        profile = get_student_profile_for_user(user, db)
+        threads = db.query(models.MessageThread).filter(
+            models.MessageThread.student_id == profile.id
+        ).order_by(models.MessageThread.updated_at.desc()).all()
+    return [serialize_message_thread(thread, db) for thread in threads]
+
+@app.post("/erp/messages", response_model=schemas.MessageThreadOut)
+@app.post("/api/erp/messages", response_model=schemas.MessageThreadOut)
+def create_message_thread(
+    payload: schemas.MessageCreateThread,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    guardian_user_id = None
+    if user.role == "guardian":
+        if student.id not in get_guardian_student_ids(user, db):
+            raise HTTPException(status_code=403, detail="Access denied")
+        guardian_user_id = user.id
+        teacher = find_class_teacher_for_student(student, db)
+    elif user.role == "teacher":
+        teacher = get_teacher_profile_for_user(user, db)
+        link = db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).first()
+        guardian_user_id = link.guardian_user_id if link else None
+    else:
+        raise HTTPException(status_code=403, detail="Messaging is available to teachers and guardians")
+    thread = models.MessageThread(
+        student_id=student.id,
+        teacher_id=teacher.id if teacher else None,
+        guardian_user_id=guardian_user_id,
+        subject=payload.subject,
+    )
+    db.add(thread)
+    db.flush()
+    message = models.ThreadMessage(
+        thread_id=thread.id,
+        sender_user_id=user.id,
+        sender_role=user.role,
+        body=payload.body,
+    )
+    db.add(message)
+    recipients = []
+    if user.role == "guardian" and teacher:
+        teacher_user = db.query(models.ErpUser).filter(models.ErpUser.id == teacher.user_id).first()
+        if teacher_user:
+            recipients.append(teacher_user.id)
+    elif user.role == "teacher" and guardian_user_id:
+        recipients.append(guardian_user_id)
+    for recipient_id in recipients:
+        create_notification(db, "erp", recipient_id, "New message", payload.subject, "message", "/erp")
+    db.commit()
+    db.refresh(thread)
+    return serialize_message_thread(thread, db)
+
+@app.get("/erp/substitutions/dashboard", response_model=schemas.SubstitutionDashboard)
+@app.get("/api/erp/substitutions/dashboard", response_model=schemas.SubstitutionDashboard)
+def get_substitution_dashboard(
+    day_of_week: Optional[int] = None,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    get_teacher_profile_for_user(user, db)
+    target_day = day_of_week if day_of_week is not None else datetime.now().weekday()
+    if target_day > 5:
+        target_day = 0
+    teachers = db.query(models.TeacherProfile).filter(models.TeacherProfile.is_active == True).all()
+    teacher_users = {
+        erp_user.id: erp_user
+        for erp_user in db.query(models.ErpUser).filter(
+            models.ErpUser.id.in_([teacher.user_id for teacher in teachers])
+        ).all()
+    } if teachers else {}
+    slots = db.query(models.TimetableSlot).filter(
+        models.TimetableSlot.day_of_week == target_day,
+        models.TimetableSlot.is_break == False,
+    ).order_by(models.TimetableSlot.period_no).all()
+    workload = []
+    for teacher in teachers:
+        count = len([slot for slot in slots if slot.teacher_id == teacher.id])
+        workload.append({
+            "teacher_id": teacher.id,
+            "teacher_name": teacher_users.get(teacher.user_id).full_name if teacher_users.get(teacher.user_id) else "Unknown",
+            "department": teacher.department,
+            "subject": teacher.subject,
+            "periods_today": count,
+        })
+    workload = sorted(workload, key=lambda row: (row["periods_today"], row["teacher_name"]))
+    cover_slots = []
+    for slot in slots:
+        class_section = db.query(models.ClassSection).filter(models.ClassSection.id == slot.class_section_id).first()
+        subject = db.query(models.Subject).filter(models.Subject.id == slot.subject_id).first() if slot.subject_id else None
+        assigned_teacher = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == slot.teacher_id).first() if slot.teacher_id else None
+        assigned_user = db.query(models.ErpUser).filter(models.ErpUser.id == assigned_teacher.user_id).first() if assigned_teacher else None
+        busy_teacher_ids = {
+            busy.teacher_id
+            for busy in slots
+            if busy.period_no == slot.period_no and busy.teacher_id
+        }
+        candidates = [
+            row for row in workload
+            if row["teacher_id"] not in busy_teacher_ids
+        ][:5]
+        cover_slots.append({
+            "slot_id": slot.id,
+            "day_of_week": slot.day_of_week,
+            "period_no": slot.period_no,
+            "start_time": slot.start_time,
+            "end_time": slot.end_time,
+            "class_label": f"{class_section.class_name}-{class_section.section}" if class_section else "Unknown",
+            "subject": subject.name if subject else None,
+            "teacher_id": slot.teacher_id,
+            "teacher_name": assigned_user.full_name if assigned_user else None,
+            "candidate_teachers": candidates,
+        })
+    return {
+        "day_of_week": target_day,
+        "teacher_workload": workload,
+        "cover_slots": cover_slots,
+    }
+
+@app.post("/erp/messages/{thread_id}", response_model=schemas.MessageThreadOut)
+@app.post("/api/erp/messages/{thread_id}", response_model=schemas.MessageThreadOut)
+def add_thread_message(
+    thread_id: int,
+    payload: schemas.MessageCreate,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    thread = db.query(models.MessageThread).filter(models.MessageThread.id == thread_id).first()
+    if not thread:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    teacher_user_id = None
+    if thread.teacher_id:
+        teacher = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == thread.teacher_id).first()
+        teacher_user_id = teacher.user_id if teacher else None
+    allowed_ids = {thread.guardian_user_id, teacher_user_id}
+    if user.id not in allowed_ids:
+        raise HTTPException(status_code=403, detail="Access denied")
+    db.add(models.ThreadMessage(
+        thread_id=thread.id,
+        sender_user_id=user.id,
+        sender_role=user.role,
+        body=payload.body,
+    ))
+    thread.updated_at = datetime.now(timezone.utc)
+    for recipient_id in [rid for rid in allowed_ids if rid and rid != user.id]:
+        create_notification(db, "erp", recipient_id, "Message reply", thread.subject, "message", "/erp")
+    db.commit()
+    db.refresh(thread)
+    return serialize_message_thread(thread, db)
+
 @app.post("/erp/leaves", response_model=schemas.LeaveRequestOut)
 @app.post("/api/erp/leaves", response_model=schemas.LeaveRequestOut)
 def create_leave_request(
@@ -1180,6 +1876,11 @@ def update_leave_request(
     obj.status = payload.status
     obj.reviewer_note = payload.reviewer_note
     obj.teacher_id = teacher.id
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == obj.student_id).first()
+    if student:
+        create_notification(db, "erp", student.user_id, f"Leave {payload.status}", payload.reviewer_note or f"Your leave request was {payload.status}.", "leave", "/erp")
+        for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+            create_notification(db, "erp", link.guardian_user_id, f"Leave {payload.status}", f"{student.admission_no}'s leave request was {payload.status}.", "leave", "/erp")
     db.commit()
     db.refresh(obj)
     return obj
@@ -1223,6 +1924,9 @@ def create_mark_entry(
         exam_date=payload.exam_date,
     )
     db.add(obj)
+    create_notification(db, "erp", student.user_id, "Marks published", f"{payload.subject} marks for {payload.exam_name}: {payload.marks_obtained}/{payload.max_marks}.", "marks", "/erp")
+    for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+        create_notification(db, "erp", link.guardian_user_id, "Marks published", f"{student.admission_no}: {payload.subject} {payload.marks_obtained}/{payload.max_marks}.", "marks", "/erp")
     db.commit()
     db.refresh(obj)
     return obj
@@ -1356,6 +2060,9 @@ def verify_razorpay_payment(
     payment.receipt_no = payment.receipt_no or generate_receipt_no(payment.id)
     invoice.paid_paise = min(invoice.amount_paise, (invoice.paid_paise or 0) + payment.amount_paise)
     sync_invoice_status(invoice)
+    create_notification(db, "erp", student.user_id, "Payment successful", f"{payment.receipt_no} has been generated.", "fee", "/erp")
+    for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+        create_notification(db, "erp", link.guardian_user_id, "Payment successful", f"{payment.receipt_no} has been generated.", "fee", "/erp")
     db.commit()
     db.refresh(payment)
     return payment
@@ -1377,6 +2084,8 @@ def get_fee_receipt(
         raise HTTPException(status_code=404, detail="Receipt data not found")
     if user.role == "student" and profile.user_id != user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view another student's receipt")
+    if user.role == "guardian" and profile.id not in get_guardian_student_ids(user, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot view another student's receipt")
     if not payment.receipt_no:
         payment.receipt_no = generate_receipt_no(payment.id)
         db.commit()
@@ -1391,6 +2100,40 @@ def get_fee_receipt(
         "payment": payment,
     }
 
+@app.post("/upload")
+@app.post("/api/upload")
+async def upload_image(
+    file: UploadFile = File(...),
+    thumbnail: Optional[UploadFile] = File(None),
+    db: Session = Depends(get_db),
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Only image uploads are allowed")
+    data = await file.read()
+    if len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image must be 8MB or smaller")
+    thumbnail_data = None
+    thumbnail_content_type = None
+    if thumbnail:
+        thumbnail_data = await thumbnail.read()
+        thumbnail_content_type = thumbnail.content_type or "image/webp"
+    obj = models.StoredImage(
+        filename=file.filename or "upload",
+        content_type=file.content_type,
+        data=data,
+        thumbnail_data=thumbnail_data or data,
+        thumbnail_content_type=thumbnail_content_type or file.content_type,
+    )
+    db.add(obj)
+    db.commit()
+    db.refresh(obj)
+    return {
+        "id": obj.id,
+        "url": f"/images/{obj.id}",
+        "thumbnail_url": f"/images/{obj.id}/thumb",
+        "content_type": obj.content_type,
+    }
+
 # Image Serving (with caching headers)
 @app.get("/images/{image_id}")
 @app.get("/api/images/{image_id}")
@@ -1402,6 +2145,23 @@ def get_image(image_id: int, db: Session = Depends(get_db)):
     return Response(
         content=image.data,
         media_type=image.content_type,
+        headers={
+            "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
+            "ETag": f'"{etag}"',
+        },
+    )
+
+@app.get("/images/{image_id}/thumb")
+@app.get("/api/images/{image_id}/thumb")
+def get_image_thumbnail(image_id: int, db: Session = Depends(get_db)):
+    image = db.query(models.StoredImage).filter(models.StoredImage.id == image_id).first()
+    if not image:
+        raise HTTPException(status_code=404, detail="Image not found")
+    data = image.thumbnail_data or image.data
+    etag = hashlib.md5(data[:1024]).hexdigest()
+    return Response(
+        content=data,
+        media_type=image.thumbnail_content_type or image.content_type,
         headers={
             "Cache-Control": "public, max-age=86400, stale-while-revalidate=604800",
             "ETag": f'"{etag}"',
@@ -1425,7 +2185,7 @@ def add_student(
         dob = payload.date_of_birth
         default_password = f"{dob.day:02d}{dob.month:02d}{dob.year}"
     else:
-        default_password = "student123"
+        default_password = secrets.token_urlsafe(10)
 
     new_user = models.ErpUser(
         email=payload.email,
@@ -1464,12 +2224,20 @@ def add_student(
             is_current=True,
         ))
 
+    guardian_credentials = ensure_guardian_link(db, new_profile)
+    create_notification(db, "erp", new_user.id, "Welcome to Narendra Edu Valley ERP", "Your student account is ready.", "account", "/erp")
+    if guardian_credentials:
+        guardian_user = db.query(models.ErpUser).filter(models.ErpUser.email == guardian_credentials["email"]).first()
+        if guardian_user:
+            create_notification(db, "erp", guardian_user.id, "Guardian account linked", f"{new_user.full_name} has been linked to your guardian portal.", "account", "/erp")
+    create_audit_log(db, "erp", user.email, "create", "student", new_profile.id, after=model_snapshot(new_profile))
     db.commit()
     db.refresh(new_profile)
     return {
         "message": "Student added successfully",
         "student_id": new_profile.id,
         "default_password": default_password,
+        "guardian_credentials": guardian_credentials,
         "email": payload.email,
     }
 
