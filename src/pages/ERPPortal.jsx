@@ -44,7 +44,10 @@ const money = (paise = 0) =>
 
 const formatDate = (value) => {
     if (!value) return '—'
-    return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value))
+    const d = typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+        ? new Date(`${value}T00:00:00`)
+        : new Date(value)
+    return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(d)
 }
 
 const today = () => new Date().toISOString().slice(0, 10)
