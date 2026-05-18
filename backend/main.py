@@ -797,6 +797,18 @@ def create_event(event: schemas.EventCreate, db: Session = Depends(get_db), admi
     db.commit()
     return obj
 
+@app.get("/events/{event_id}", response_model=schemas.Event)
+@app.get("/api/events/{event_id}", response_model=schemas.Event)
+def get_event(event_id: int, db: Session = Depends(get_db)):
+    event = db.query(models.Event).filter(
+        models.Event.id == event_id,
+        models.Event.deleted_at.is_(None),
+    ).first()
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
+    event.image_url = fix_image_url(event.image_url)
+    return event
+
 @app.put("/events/{event_id}", response_model=schemas.Event)
 @app.put("/api/events/{event_id}", response_model=schemas.Event)
 def update_event(event_id: int, event: schemas.EventCreate, db: Session = Depends(get_db), admin=Depends(get_current_admin)):

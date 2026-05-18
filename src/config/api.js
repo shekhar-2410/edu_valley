@@ -3,6 +3,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 export const API_ENDPOINTS = {
     erpBase: `${API_BASE_URL}/erp`,
     events: `${API_BASE_URL}/events`,
+    eventById: (id) => `${API_BASE_URL}/events/${id}`,
     announcements: `${API_BASE_URL}/announcements`,
     faculty: `${API_BASE_URL}/faculty`,
     gallery: `${API_BASE_URL}/gallery`,
