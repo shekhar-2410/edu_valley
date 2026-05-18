@@ -1282,6 +1282,160 @@ def admin_list_leave_requests(admin=Depends(get_current_admin), db: Session = De
     return db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
 
 
+# ── Soft delete + restore + trash listing for ERP entities ───────────────────
+
+@app.post("/admin/erp/students/{student_id}/delete")
+@app.post("/api/admin/erp/students/{student_id}/delete")
+def admin_soft_delete_student(student_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    before = model_snapshot(student)
+    soft_delete(student, db)
+    create_audit_log(db, "admin", admin.email, "delete", "student_profile", student.id, before=before, after={"deleted_at": student.deleted_at.isoformat() if student.deleted_at else None})
+    db.commit()
+    return {"status": "ok", "id": student.id}
+
+
+@app.post("/admin/erp/students/{student_id}/restore")
+@app.post("/api/admin/erp/students/{student_id}/restore")
+def admin_restore_student(student_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    restored = restore_deleted(student, db)
+    create_audit_log(db, "admin", admin.email, "restore", "student_profile", student.id, before={"deleted_at": "set"}, after=model_snapshot(restored))
+    db.commit()
+    return {"status": "ok", "id": student.id}
+
+
+@app.get("/admin/erp/trash/students")
+@app.get("/api/admin/erp/trash/students")
+def admin_list_trashed_students(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    students = (
+        db.query(models.StudentProfile)
+        .filter(models.StudentProfile.deleted_at.isnot(None))
+        .order_by(models.StudentProfile.deleted_at.desc())
+        .all()
+    )
+    user_ids = [s.user_id for s in students]
+    users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()} if user_ids else {}
+    return [
+        {
+            "id": s.id,
+            "admission_no": s.admission_no,
+            "class_name": s.class_name,
+            "section": s.section,
+            "roll_no": s.roll_no,
+            "full_name": users[s.user_id].full_name if users.get(s.user_id) else "Unknown",
+            "deleted_at": s.deleted_at.isoformat() if s.deleted_at else None,
+        }
+        for s in students
+    ]
+
+
+@app.post("/admin/erp/teachers/{teacher_id}/delete")
+@app.post("/api/admin/erp/teachers/{teacher_id}/delete")
+def admin_soft_delete_teacher(teacher_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    teacher = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == teacher_id).first()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    before = model_snapshot(teacher)
+    soft_delete(teacher, db)
+    create_audit_log(db, "admin", admin.email, "delete", "teacher_profile", teacher.id, before=before, after={"deleted_at": teacher.deleted_at.isoformat() if teacher.deleted_at else None})
+    db.commit()
+    return {"status": "ok", "id": teacher.id}
+
+
+@app.post("/admin/erp/teachers/{teacher_id}/restore")
+@app.post("/api/admin/erp/teachers/{teacher_id}/restore")
+def admin_restore_teacher(teacher_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    teacher = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == teacher_id).first()
+    if not teacher:
+        raise HTTPException(status_code=404, detail="Teacher not found")
+    restored = restore_deleted(teacher, db)
+    create_audit_log(db, "admin", admin.email, "restore", "teacher_profile", teacher.id, before={"deleted_at": "set"}, after=model_snapshot(restored))
+    db.commit()
+    return {"status": "ok", "id": teacher.id}
+
+
+@app.get("/admin/erp/trash/teachers")
+@app.get("/api/admin/erp/trash/teachers")
+def admin_list_trashed_teachers(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    teachers = (
+        db.query(models.TeacherProfile)
+        .filter(models.TeacherProfile.deleted_at.isnot(None))
+        .order_by(models.TeacherProfile.deleted_at.desc())
+        .all()
+    )
+    user_ids = [t.user_id for t in teachers]
+    users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()} if user_ids else {}
+    return [
+        {
+            "id": t.id,
+            "employee_no": t.employee_no,
+            "department": t.department,
+            "subject": t.subject,
+            "class_teacher_of": t.class_teacher_of,
+            "full_name": users[t.user_id].full_name if users.get(t.user_id) else "Unknown",
+            "email": users[t.user_id].email if users.get(t.user_id) else None,
+            "deleted_at": t.deleted_at.isoformat() if t.deleted_at else None,
+        }
+        for t in teachers
+    ]
+
+
+@app.post("/admin/erp/invoices/{invoice_id}/delete")
+@app.post("/api/admin/erp/invoices/{invoice_id}/delete")
+def admin_soft_delete_invoice(invoice_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    before = model_snapshot(invoice)
+    soft_delete(invoice, db)
+    create_audit_log(db, "admin", admin.email, "delete", "fee_invoice", invoice.id, before=before, after={"deleted_at": invoice.deleted_at.isoformat() if invoice.deleted_at else None})
+    db.commit()
+    return {"status": "ok", "id": invoice.id}
+
+
+@app.post("/admin/erp/invoices/{invoice_id}/restore")
+@app.post("/api/admin/erp/invoices/{invoice_id}/restore")
+def admin_restore_invoice(invoice_id: int, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == invoice_id).first()
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    restored = restore_deleted(invoice, db)
+    create_audit_log(db, "admin", admin.email, "restore", "fee_invoice", invoice.id, before={"deleted_at": "set"}, after=model_snapshot(restored))
+    db.commit()
+    return {"status": "ok", "id": invoice.id}
+
+
+@app.get("/admin/erp/trash/invoices")
+@app.get("/api/admin/erp/trash/invoices")
+def admin_list_trashed_invoices(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
+    invoices = (
+        db.query(models.FeeInvoice)
+        .filter(models.FeeInvoice.deleted_at.isnot(None))
+        .order_by(models.FeeInvoice.deleted_at.desc())
+        .all()
+    )
+    return [
+        {
+            "id": inv.id,
+            "invoice_no": inv.invoice_no,
+            "student_id": inv.student_id,
+            "title": inv.title,
+            "term": inv.term,
+            "amount_paise": inv.amount_paise,
+            "paid_paise": inv.paid_paise or 0,
+            "due_date": inv.due_date.isoformat() if inv.due_date else None,
+            "status": inv.status,
+            "deleted_at": inv.deleted_at.isoformat() if inv.deleted_at else None,
+        }
+        for inv in invoices
+    ]
+
+
 @app.get("/admin/erp/fees/students")
 @app.get("/api/admin/erp/fees/students")
 def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
