@@ -2055,8 +2055,6 @@ def find_class_teacher_for_student(student: models.StudentProfile, db: Session) 
     return db.query(models.TeacherProfile).filter(
         models.TeacherProfile.class_teacher_of == f"Class {student.class_name} {student.section}",
         models.TeacherProfile.deleted_at.is_(None),
-    ).first() or db.query(models.TeacherProfile).filter(
-        models.TeacherProfile.deleted_at.is_(None),
     ).first()
 
 @app.get("/erp/messages", response_model=List[schemas.MessageThreadOut])
@@ -2278,12 +2276,7 @@ def create_leave_request(
     days_count = (leave.to_date - leave.from_date).days + 1
     if days_count <= 0:
         raise HTTPException(status_code=400, detail="Leave end date must be on or after start date")
-    teacher = db.query(models.TeacherProfile).filter(
-        models.TeacherProfile.class_teacher_of == f"Class {profile.class_name} {profile.section}",
-        models.TeacherProfile.deleted_at.is_(None),
-    ).first() or db.query(models.TeacherProfile).filter(
-        models.TeacherProfile.deleted_at.is_(None),
-    ).first()
+    teacher = find_class_teacher_for_student(profile, db)
     obj = models.LeaveRequest(
         student_id=profile.id,
         teacher_id=teacher.id if teacher else None,
