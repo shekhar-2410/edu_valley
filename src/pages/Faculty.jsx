@@ -17,9 +17,22 @@ const Faculty = () => {
     const fetchFaculty = async () => {
         try {
             const response = await fetch(API_ENDPOINTS.faculty)
+            if (!response.ok) {
+                console.error(`Failed to fetch faculty: ${response.status}`)
+                setError(true)
+                setFaculty([])
+                return
+            }
             const data = await response.json()
+            if (!Array.isArray(data)) {
+                console.error('Expected array from /faculty endpoint, got:', data)
+                setError(true)
+                setFaculty([])
+                return
+            }
             setFaculty(data)
-        } catch {
+        } catch (error) {
+            console.error('Network error fetching faculty:', error)
             setError(true)
             setFaculty([])
         } finally {

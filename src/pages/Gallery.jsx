@@ -46,9 +46,22 @@ const Gallery = () => {
     const fetchGallery = async () => {
         try {
             const response = await fetch(API_ENDPOINTS.gallery)
+            if (!response.ok) {
+                console.error(`Failed to fetch gallery: ${response.status}`)
+                setError(true)
+                setImages([])
+                return
+            }
             const data = await response.json()
+            if (!Array.isArray(data)) {
+                console.error('Expected array from /gallery endpoint, got:', data)
+                setError(true)
+                setImages([])
+                return
+            }
             setImages(data)
-        } catch {
+        } catch (error) {
+            console.error('Network error fetching gallery:', error)
             setError(true)
             setImages([])
         } finally {

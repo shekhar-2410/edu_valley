@@ -17,13 +17,22 @@ const Events = () => {
     const fetchEvents = async () => {
         try {
             const response = await fetch(API_ENDPOINTS.events)
-            if (response.ok) {
-                const data = await response.json()
-                setEvents(data)
-            } else {
-                throw new Error('Failed to fetch')
+            if (!response.ok) {
+                console.error(`Failed to fetch events: ${response.status}`)
+                setError(true)
+                setEvents([])
+                return
             }
-        } catch {
+            const data = await response.json()
+            if (!Array.isArray(data)) {
+                console.error('Expected array from /events endpoint, got:', data)
+                setError(true)
+                setEvents([])
+                return
+            }
+            setEvents(data)
+        } catch (error) {
+            console.error('Network error fetching events:', error)
             setError(true)
             setEvents([])
         } finally {
