@@ -1,10 +1,45 @@
-import { Bell, Calendar, Edit2, Image, LogOut, Plus, Trash2, User, X, Check, ChevronDown, BookOpen, School, UserPlus, ChevronRight, Loader2, CreditCard, Receipt, Printer } from 'lucide-react'
+import { AlertCircle, Archive, Bell, BookOpen, Calendar, Check, CheckCircle2, ChevronDown, ChevronRight, Clock, CreditCard, Edit2, Image, Inbox, LayoutDashboard, Loader2, LogOut, Mail, Menu, MessageSquare, Plus, Printer, Receipt, School, Search, Trash2, User, UserPlus, X } from 'lucide-react'
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { API_ENDPOINTS } from '../config/api'
 import { toast } from 'react-toastify'
 import { printReceiptPDF, printInvoicePDF, shareReceiptWhatsApp } from '../utils/pdfPrint'
- 
+import SideSheet from '../components/ui/SideSheet'
+import DataTable from '../components/ui/DataTable'
+
+// Centralised admin fetch wrapper. Attaches the admin bearer token and
+// detects expired/forged sessions (401) so the user is redirected to
+// /admin-login instead of staring at a half-broken dashboard. New admin
+// fetch sites SHOULD use this helper rather than calling fetch() directly.
+//
+// Note: this returns the raw Response (like fetch). The existing
+// `adminFetch` helper inside ERPManager wraps this and parses JSON.
+//
+// TODO(session-expiry): the remaining direct fetch(..., { headers: getAuthHeaders() })
+// call sites in this file (events/announcements/faculty/gallery managers,
+// content delete/restore helpers) still handle 401 locally. Migrate them
+// to adminApiFetch over time so 401 handling stays in one place.
+export const adminApiFetch = async (url, options = {}) => {
+    const token = localStorage.getItem('adminToken')
+    const { headers: extraHeaders, ...rest } = options
+    const response = await fetch(url, {
+        ...rest,
+        headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(extraHeaders || {}),
+        },
+    })
+    if (response.status === 401) {
+        localStorage.removeItem('adminToken')
+        localStorage.removeItem('adminAuthenticated')
+        toast.error('Session expired. Please log in again.')
+        window.location.href = '/admin-login'
+        throw new Error('Session expired')
+    }
+    return response
+}
+
 // Premium Delete Action Component
 const DeleteAction = ({ onDelete }) => {
     const [isConfirming, setIsConfirming] = useState(false)
@@ -12,17 +47,17 @@ const DeleteAction = ({ onDelete }) => {
     if (isConfirming) {
         return (
             <div className="flex items-center gap-1.5 animate-in fade-in slide-in-from-right-3 duration-300">
-                <button 
+                <button
                     type="button"
                     onClick={() => {
                         onDelete()
                         setIsConfirming(false)
                     }}
-                    className="flex items-center gap-1.5 px-3 py-2 bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest rounded-xl hover:bg-rose-700 shadow-lg shadow-rose-600/30 transition-all active:scale-95"
+                    className="flex items-center gap-1.5 rounded-xl bg-rose-600 px-3 py-2 text-[10px] font-semibold text-white shadow-lg shadow-rose-600/30 transition-all hover:bg-rose-700 active:scale-95"
                 >
                     <Check size={12} /> Confirm
                 </button>
-                <button 
+                <button
                     type="button"
                     onClick={() => setIsConfirming(false)}
                     className="p-2 bg-slate-100 text-slate-500 rounded-xl hover:bg-slate-200 transition-colors"
@@ -34,7 +69,7 @@ const DeleteAction = ({ onDelete }) => {
     }
 
     return (
-        <button 
+        <button
             type="button"
             className="p-2 bg-rose-50 text-rose-600 rounded-lg hover:bg-rose-600 hover:text-white transition-all shadow-sm"
             onClick={(e) => {
@@ -48,10 +83,28 @@ const DeleteAction = ({ onDelete }) => {
     )
 }
 
+const websiteSections = [
+    { id: 'overview', label: 'Overview', icon: <LayoutDashboard size={18} /> },
+    { id: 'messages', label: 'Messages', icon: <Mail size={18} /> },
+    { id: 'activity', label: 'Activity', icon: <Clock size={18} /> },
+    { id: 'announcements', label: 'Announcements', icon: <Bell size={18} /> },
+    { id: 'events', label: 'Events', icon: <Calendar size={18} /> },
+    { id: 'faculty', label: 'Faculty', icon: <User size={18} /> },
+    { id: 'gallery', label: 'Gallery', icon: <Image size={18} /> },
+]
+
+const erpSections = [
+    { id: 'teachers', label: 'Teachers', icon: <User size={18} /> },
+    { id: 'classes', label: 'Classes & Subjects', icon: <BookOpen size={18} /> },
+    { id: 'timetable', label: 'Timetable', icon: <Calendar size={18} /> },
+    { id: 'fees', label: 'Fees & Invoices', icon: <CreditCard size={18} /> },
+]
+
 const Admin = () => {
-    const [activeTab, setActiveTab] = useState('events')
     const [showAddForm, setShowAddForm] = useState(false)
+    const [drawerOpen, setDrawerOpen] = useState(false)
     const navigate = useNavigate()
+    const location = useLocation()
 
     const handleLogout = () => {
         localStorage.removeItem('adminAuthenticated')
@@ -67,87 +120,664 @@ const Admin = () => {
         }
     }
 
-    const tabs = [
-        { id: 'events', label: 'Events', icon: <Calendar size={20} /> },
-        { id: 'announcements', label: 'Announcements', icon: <Bell size={20} /> },
-        { id: 'faculty', label: 'Faculty', icon: <User size={20} /> },
-        { id: 'gallery', label: 'Gallery', icon: <Image size={20} /> },
-        { id: 'erp', label: 'ERP', icon: <School size={20} /> },
-    ]
+    const createTabs = ['events', 'announcements', 'faculty', 'gallery']
+    const createLabels = {
+        events: 'Add Event',
+        announcements: 'New Announcement',
+        faculty: 'Add Faculty',
+        gallery: 'Upload Image',
+    }
+
+    const pathParts = location.pathname.split('/').filter(Boolean)
+    const areaParam = pathParts[1]
+    const sectionParam = pathParts[2]
+    const activeArea = areaParam === 'erp' ? 'erp' : 'website'
+    const activeSection = sectionParam || (activeArea === 'erp' ? 'teachers' : 'overview')
+    const activeSectionList = activeArea === 'erp' ? erpSections : websiteSections
+    const currentTab = activeSectionList.find((item) => item.id === activeSection) || activeSectionList[0]
+    const canCreate = activeArea === 'website' && createTabs.includes(activeSection)
+
+    React.useEffect(() => {
+        if (location.pathname === '/admin') {
+            navigate('/admin/website/overview', { replace: true })
+            return
+        }
+        const validArea = areaParam === 'website' || areaParam === 'erp'
+        const validSection = activeSectionList.some((item) => item.id === activeSection)
+        if (!validArea || !validSection) {
+            navigate('/admin/website/overview', { replace: true })
+        }
+    }, [activeArea, activeSection, activeSectionList, areaParam, location.pathname, navigate])
+
+    const goToSection = (areaId, sectionId, shouldOpenForm = false) => {
+        navigate(`/admin/${areaId}/${sectionId}`)
+        setShowAddForm(shouldOpenForm && areaId === 'website' && createTabs.includes(sectionId))
+        setDrawerOpen(false)
+    }
+
+    const jumpTo = (sectionId, shouldOpenForm = false) => {
+        goToSection('website', sectionId, shouldOpenForm)
+    }
+
+    const SidebarContent = () => (
+        <div className="flex h-full flex-col">
+            <div className="border-b border-white/10 px-5 py-6">
+                <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/15 text-white">
+                        <School size={19} />
+                    </div>
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-widest text-white/50">Admin</p>
+                        <p className="text-sm font-bold text-white">Edu Valley</p>
+                    </div>
+                </div>
+            </div>
+
+            <nav className="flex-1 overflow-y-auto px-3 py-4">
+                <p className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-widest text-white/40">Website</p>
+                <div className="space-y-1">
+                    {websiteSections.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => goToSection('website', item.id)}
+                            className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                activeArea === 'website' && activeSection === item.id
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                            }`}
+                        >
+                            {item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+
+                <p className="px-3 pb-2 pt-6 text-[11px] font-semibold uppercase tracking-widest text-white/40">School ERP</p>
+                <div className="space-y-1">
+                    {erpSections.map((item) => (
+                        <button
+                            key={item.id}
+                            type="button"
+                            onClick={() => goToSection('erp', item.id)}
+                            className={`flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left text-sm font-semibold transition-colors ${
+                                activeArea === 'erp' && activeSection === item.id
+                                    ? 'bg-white/15 text-white'
+                                    : 'text-white/60 hover:bg-white/10 hover:text-white'
+                            }`}
+                        >
+                            {item.icon}
+                            {item.label}
+                        </button>
+                    ))}
+                </div>
+            </nav>
+
+            <div className="border-t border-white/10 p-4">
+                <button
+                    type="button"
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white/60 transition-all hover:bg-white/10 hover:text-white"
+                >
+                    <LogOut size={15} />
+                    Logout
+                </button>
+            </div>
+        </div>
+    )
 
     return (
-        <div className="bg-brand-cream min-h-screen">
-            {/* Header Section */}
-            <section className="bg-white border-b border-slate-200">
-                <div className="container mx-auto px-4 py-8 md:py-12">
-                    <div className="flex flex-col md:flex-row justify-between items-center gap-8">
-                        <div>
-                            <div className="flex items-center gap-3 mb-1">
-                                <span className="w-10 h-1 text-brand-navy-600 bg-brand-navy-600 rounded-full"></span>
-                                <span className="text-xs font-black text-brand-navy-600 uppercase tracking-[0.3em]">Administrator</span>
+        <div className="min-h-screen bg-slate-50 lg:pl-72">
+            <aside className="fixed inset-y-0 left-0 z-40 hidden w-72 bg-brand-navy-700 lg:block">
+                <SidebarContent />
+            </aside>
+
+            {drawerOpen && (
+                <div className="fixed inset-0 z-50 lg:hidden">
+                    <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-sm" onClick={() => setDrawerOpen(false)} />
+                    <aside className="absolute left-0 top-0 h-full w-72 bg-brand-navy-700 shadow-2xl">
+                        <SidebarContent />
+                    </aside>
+                </div>
+            )}
+
+            <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/95 backdrop-blur">
+                <div className="px-4 py-4 md:px-8">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                        <div className="flex items-center gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setDrawerOpen(true)}
+                                className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 text-slate-600 lg:hidden"
+                                aria-label="Open admin menu"
+                            >
+                                <Menu size={19} />
+                            </button>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <span className="h-1 w-9 rounded-full bg-brand-navy-600" />
+                                    <span className="text-xs font-semibold uppercase tracking-widest text-brand-navy-600">
+                                        {activeArea === 'erp' ? 'School ERP' : 'Website'}
+                                    </span>
+                                </div>
+                                <h1 className="mt-1 font-display text-3xl font-black tracking-tight text-slate-900">{currentTab.label}</h1>
                             </div>
-                            <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight uppercase">Dashboard</h1>
                         </div>
-                        <div className="flex items-center gap-4 w-full md:w-auto">
-                                {activeTab !== 'erp' && (
+                        <div className="flex items-center gap-3">
+                            <AdminNotificationCenter getAuthHeaders={getAuthHeaders} />
+                            {canCreate && (
                                 <button
-                                    className={`flex-1 md:flex-none inline-flex items-center justify-center gap-2 font-bold px-8 py-4 rounded-2xl shadow-lg transition-all active:scale-95 ${
+                                    type="button"
+                                    className={`inline-flex items-center justify-center gap-2 rounded-2xl px-6 py-3 text-sm font-semibold shadow-lg transition-all active:scale-95 ${
                                         showAddForm
-                                        ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                                        : 'bg-brand-navy-600 text-white hover:bg-brand-navy-700 shadow-brand-navy-600/20'
+                                            ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                            : 'bg-brand-navy-600 text-white shadow-brand-navy-600/20 hover:bg-brand-navy-700'
                                     }`}
                                     onClick={() => setShowAddForm(!showAddForm)}
                                 >
-                                    {showAddForm ? 'Hide Form' : `Add ${activeTab.charAt(0).toUpperCase() + activeTab.slice(1)}`}
+                                    {showAddForm ? 'Hide Form' : createLabels[activeSection]}
                                 </button>
-                                )}
-                            <button 
-                                className="inline-flex items-center justify-center p-4 bg-slate-100 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-2xl transition-all active:scale-95" 
-                                onClick={handleLogout}
-                                title="Sign Out"
-                            >
-                                <LogOut size={24} />
-                            </button>
+                            )}
                         </div>
                     </div>
                 </div>
-            </section>
+            </header>
 
-            <section className="py-12">
-                <div className="container mx-auto px-4">
-                    {/* Tabs */}
-                    <div className="flex flex-wrap gap-2 mb-10 bg-slate-200/50 p-2 rounded-2xl w-fit">
-                        {tabs.map((tab) => (
-                            <button
-                                key={tab.id}
-                                className={`inline-flex items-center gap-3 px-6 py-3 rounded-xl font-bold text-sm transition-all ${
-                                    activeTab === tab.id 
-                                    ? 'bg-white text-brand-navy-600 shadow-sm' 
-                                    : 'text-slate-600 hover:text-slate-900 hover:bg-white/50'
-                                }`}
-                                onClick={() => {
-                                    setActiveTab(tab.id)
-                                    setShowAddForm(false)
-                                }}
-                            >
-                                {tab.icon}
-                                {tab.label}
+            <main className="px-4 py-6 md:px-8">
+                <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm md:p-8">
+                    {activeArea === 'website' && activeSection === 'overview' && <AdminOverview getAuthHeaders={getAuthHeaders} onNavigate={jumpTo} />}
+                    {activeArea === 'website' && activeSection === 'messages' && <MessagesManager getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'website' && activeSection === 'activity' && <ActivityManager getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'website' && activeSection === 'events' && <EventsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'website' && activeSection === 'announcements' && <AnnouncementsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'website' && activeSection === 'faculty' && <FacultyManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'website' && activeSection === 'gallery' && <GalleryManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
+                    {activeArea === 'erp' && <ERPManager getAuthHeaders={getAuthHeaders} section={activeSection} onSectionChange={(id) => goToSection('erp', id)} />}
+                </div>
+            </main>
+        </div>
+    )
+}
+
+const adminMoney = (paise = 0) =>
+    new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format((paise || 0) / 100)
+
+const adminDate = (value) => {
+    if (!value) return '—'
+    return new Intl.DateTimeFormat('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value))
+}
+
+const timeAgo = (value) => {
+    if (!value) return 'Just now'
+    const diff = Date.now() - new Date(value).getTime()
+    const minute = 60 * 1000
+    const hour = 60 * minute
+    const day = 24 * hour
+    if (diff < minute) return 'Just now'
+    if (diff < hour) return `${Math.floor(diff / minute)}m ago`
+    if (diff < day) return `${Math.floor(diff / hour)}h ago`
+    return `${Math.floor(diff / day)}d ago`
+}
+
+const deleteWithUndo = ({ label, commit, onOptimisticRemove, onUndo }) => {
+    let undone = false
+    onOptimisticRemove?.()
+    const toastId = toast(
+        ({ closeToast }) => (
+            <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-semibold">{label} deleted.</span>
+                <button
+                    type="button"
+                    onClick={() => {
+                        undone = true
+                        onUndo?.()
+                        closeToast()
+                    }}
+                    className="rounded-lg bg-white px-3 py-1.5 text-xs font-bold text-brand-navy-700"
+                >
+                    Undo
+                </button>
+            </div>
+        ),
+        { autoClose: 10000, closeOnClick: false }
+    )
+    window.setTimeout(async () => {
+        if (undone) return
+        try {
+            await commit()
+        } catch (error) {
+            onUndo?.()
+            toast.error(error.message || 'Delete failed')
+        } finally {
+            toast.dismiss(toastId)
+        }
+    }, 10000)
+}
+
+const contentUrl = (endpoint, showTrash) => `${endpoint}${showTrash ? '?trash=true' : ''}`
+
+const commitContentDeletes = async (endpoint, ids, getAuthHeaders) => {
+    const responses = await Promise.all(ids.map((id) => fetch(`${endpoint}/${id}`, {
+        method: 'DELETE',
+        headers: getAuthHeaders()
+    })))
+    const failed = responses.find((response) => !response.ok)
+    if (failed) {
+        const error = await failed.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(error.detail || failed.statusText)
+    }
+}
+
+const restoreContentRows = async (endpoint, ids, getAuthHeaders) => {
+    const responses = await Promise.all(ids.map((id) => fetch(`${endpoint}/${id}/restore`, {
+        method: 'PATCH',
+        headers: getAuthHeaders()
+    })))
+    const failed = responses.find((response) => !response.ok)
+    if (failed) {
+        const error = await failed.json().catch(() => ({ detail: 'Unknown error' }))
+        throw new Error(error.detail || failed.statusText)
+    }
+}
+
+const buildImageUploadFormData = async (file) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    if (!file.type.startsWith('image/')) return formData
+    try {
+        const bitmap = await createImageBitmap(file)
+        const max = 360
+        const scale = Math.min(1, max / Math.max(bitmap.width, bitmap.height))
+        const canvas = document.createElement('canvas')
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale))
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale))
+        const ctx = canvas.getContext('2d')
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
+        const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.78))
+        if (blob) {
+            formData.append('thumbnail', new File([blob], `${file.name.replace(/\.[^.]+$/, '')}.webp`, { type: 'image/webp' }))
+        }
+        bitmap.close?.()
+    } catch {
+        return formData
+    }
+    return formData
+}
+
+const getStoredMessageState = () => {
+    try {
+        return JSON.parse(localStorage.getItem('adminMessageState') || '{}')
+    } catch {
+        return {}
+    }
+}
+
+const AdminOverview = ({ getAuthHeaders, onNavigate }) => {
+    const [data, setData] = useState({
+        contacts: [],
+        events: [],
+        announcements: [],
+        gallery: [],
+        leaves: [],
+        feeSummary: null,
+    })
+    const [loading, setLoading] = useState(true)
+    const baseUrl = import.meta.env.VITE_API_URL || ''
+
+    React.useEffect(() => {
+        const fetchJson = async (url, auth = false) => {
+            const response = auth
+                ? await adminApiFetch(url)
+                : await fetch(url)
+            if (!response.ok) throw new Error('Overview request failed')
+            return response.json()
+        }
+
+        const load = async () => {
+            setLoading(true)
+            const [contacts, events, announcements, gallery, leaves, feeSummary] = await Promise.allSettled([
+                fetchJson(API_ENDPOINTS.contacts, true),
+                fetchJson(API_ENDPOINTS.events),
+                fetchJson(API_ENDPOINTS.announcements),
+                fetchJson(API_ENDPOINTS.gallery),
+                fetchJson(`${baseUrl}/admin/erp/leaves`, true),
+                fetchJson(`${baseUrl}/admin/erp/fees/summary`, true),
+            ])
+
+            setData({
+                contacts: contacts.status === 'fulfilled' ? contacts.value : [],
+                events: events.status === 'fulfilled' ? events.value : [],
+                announcements: announcements.status === 'fulfilled' ? announcements.value : [],
+                gallery: gallery.status === 'fulfilled' ? gallery.value : [],
+                leaves: leaves.status === 'fulfilled' ? leaves.value : [],
+                feeSummary: feeSummary.status === 'fulfilled' ? feeSummary.value : null,
+            })
+            setLoading(false)
+        }
+
+        load()
+    }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const now = new Date()
+    const sevenDaysFromNow = new Date(now)
+    sevenDaysFromNow.setDate(now.getDate() + 7)
+    const sevenDaysAgo = new Date(now)
+    sevenDaysAgo.setDate(now.getDate() - 7)
+
+    const unreadMessages = data.contacts.filter((message) => message.status !== 'archived' && !message.read).length
+    const upcomingEvents = data.events.filter((event) => {
+        const date = new Date(event.date)
+        return date >= new Date(now.toDateString()) && date <= sevenDaysFromNow
+    }).length
+    const pendingLeaves = data.leaves.filter((leave) => leave.status === 'pending').length
+    const recentGallery = data.gallery.filter((image) => new Date(image.created_at) >= sevenDaysAgo).length
+
+    const kpis = [
+        { label: 'Unread messages', value: unreadMessages, sub: `${data.contacts.length} total`, icon: <Inbox size={22} />, tone: 'bg-brand-crimson-50 text-brand-crimson-700' },
+        { label: 'Upcoming events', value: upcomingEvents, sub: 'Next 7 days', icon: <Calendar size={22} />, tone: 'bg-brand-navy-50 text-brand-navy-700' },
+        { label: 'Pending leaves', value: pendingLeaves, sub: 'Needs review', icon: <AlertCircle size={22} />, tone: 'bg-amber-50 text-amber-700' },
+        { label: 'Fee dues', value: data.feeSummary ? adminMoney(data.feeSummary.outstanding_paise) : '—', sub: 'Outstanding', icon: <CreditCard size={22} />, tone: 'bg-rose-50 text-rose-700' },
+        { label: 'Announcements', value: data.announcements.length, sub: 'Active posts', icon: <Bell size={22} />, tone: 'bg-brand-gold-50 text-brand-gold-700' },
+        { label: 'Gallery uploads', value: recentGallery, sub: 'Last 7 days', icon: <Image size={22} />, tone: 'bg-slate-100 text-slate-700' },
+    ]
+
+    const activity = [
+        ...data.contacts.map((item) => ({ id: `contact-${item.id}`, actor: item.name, action: 'sent a message', entity: item.subject, at: item.created_at, icon: <Mail size={15} /> })),
+        ...data.events.map((item) => ({ id: `event-${item.id}`, actor: 'Admin', action: 'published event', entity: item.title, at: item.created_at, icon: <Calendar size={15} /> })),
+        ...data.announcements.map((item) => ({ id: `announcement-${item.id}`, actor: 'Admin', action: 'posted announcement', entity: item.title, at: item.created_at, icon: <Bell size={15} /> })),
+        ...data.gallery.map((item) => ({ id: `gallery-${item.id}`, actor: 'Admin', action: 'uploaded image', entity: item.title, at: item.created_at, icon: <Image size={15} /> })),
+    ].sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0)).slice(0, 15)
+
+    if (loading) {
+        return (
+            <div className="space-y-8 animate-pulse">
+                <div className="h-20 rounded-2xl bg-slate-100" />
+                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {Array.from({ length: 6 }).map((_, index) => <div key={index} className="h-32 rounded-2xl bg-slate-100" />)}
+                </div>
+                <div className="h-72 rounded-2xl bg-slate-100" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="space-y-8 animate-fade-in">
+            <div className="flex flex-col justify-between gap-4 rounded-3xl border border-brand-navy-100 bg-brand-navy-50 p-6 md:flex-row md:items-center">
+                <div>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-600">Today</p>
+                    <h2 className="mt-1 font-display text-3xl font-bold text-slate-950">Good day, Admin</h2>
+                    <p className="mt-1 text-sm font-medium text-slate-500">{new Intl.DateTimeFormat('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(now)}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                    <button type="button" onClick={() => onNavigate('announcements', true)} className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy-700 shadow-sm hover:bg-brand-navy-100">New Announcement</button>
+                    <button type="button" onClick={() => onNavigate('events', true)} className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy-700 shadow-sm hover:bg-brand-navy-100">New Event</button>
+                    <button type="button" onClick={() => onNavigate('gallery', true)} className="rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-brand-navy-700 shadow-sm hover:bg-brand-navy-100">Upload Image</button>
+                    <button type="button" onClick={() => onNavigate('messages')} className="rounded-xl bg-brand-navy-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-navy-800">View Messages</button>
+                </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {kpis.map((kpi) => (
+                    <div key={kpi.label} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className={`mb-5 flex h-11 w-11 items-center justify-center rounded-xl ${kpi.tone}`}>{kpi.icon}</div>
+                        <p className="font-display text-3xl font-bold text-slate-900">{kpi.value}</p>
+                        <p className="mt-1 text-sm font-semibold text-slate-700">{kpi.label}</p>
+                        <p className="mt-1 text-xs font-medium text-slate-500">{kpi.sub}</p>
+                    </div>
+                ))}
+            </div>
+
+            <div className="grid gap-6 xl:grid-cols-[1fr_360px]">
+                <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                    <div className="border-b border-slate-100 px-5 py-4">
+                        <h2 className="text-lg font-bold text-slate-950">Recent activity</h2>
+                    </div>
+                    {activity.length === 0 ? (
+                        <div className="p-6">
+                            <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-medium text-slate-500">No recent website activity yet.</div>
+                        </div>
+                    ) : (
+                        <div className="divide-y divide-slate-100">
+                            {activity.map((item) => (
+                                <div key={item.id} className="flex items-center gap-4 px-5 py-4">
+                                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500">{item.icon}</div>
+                                    <div className="min-w-0 flex-1">
+                                        <p className="truncate text-sm font-semibold text-slate-900">{item.actor} <span className="font-medium text-slate-500">{item.action}</span></p>
+                                        <p className="truncate text-xs text-slate-500">{item.entity}</p>
+                                    </div>
+                                    <time className="shrink-0 font-mono text-xs font-medium text-slate-400">{timeAgo(item.at)}</time>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between">
+                        <h2 className="text-lg font-bold text-slate-950">Pending messages</h2>
+                        <button type="button" onClick={() => onNavigate('messages')} className="text-xs font-semibold text-brand-navy-600 hover:text-brand-navy-800">Open inbox</button>
+                    </div>
+                    {data.contacts.length === 0 ? (
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center text-sm font-medium text-slate-500">No contact messages yet.</div>
+                    ) : (
+                        <div className="space-y-3">
+                            {data.contacts.slice(0, 5).map((message) => (
+                                <button key={message.id} type="button" onClick={() => onNavigate('messages')} className="w-full rounded-xl border border-slate-100 bg-slate-50 p-3 text-left hover:border-brand-navy-200 hover:bg-brand-navy-50">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <p className="truncate text-sm font-semibold text-slate-900">{message.name}</p>
+                                        <span className="font-mono text-[11px] font-medium text-slate-400">{timeAgo(message.created_at)}</span>
+                                    </div>
+                                    <p className="mt-1 truncate text-xs font-medium text-slate-500">{message.subject}</p>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    )
+}
+
+const MessagesManager = ({ getAuthHeaders }) => {
+    const [messages, setMessages] = useState([])
+    const [loading, setLoading] = useState(true)
+    const [selectedId, setSelectedId] = useState(null)
+    const [filter, setFilter] = useState('all')
+    const [search, setSearch] = useState('')
+
+    const load = async () => {
+        setLoading(true)
+        try {
+            const response = await adminApiFetch(API_ENDPOINTS.contacts)
+            if (!response.ok) throw new Error('Could not load contact messages')
+            const data = await response.json()
+            setMessages(data)
+            if (!selectedId && data.length > 0) setSelectedId(data[0].id)
+        } catch (error) {
+            toast.error(error.message || 'Failed to load messages')
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    React.useEffect(() => { load() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const statusOf = (message) => message.status || 'new'
+    const isRead = (message) => Boolean(message.read)
+
+    const markMessage = async (id, updates) => {
+        setMessages((prev) => prev.map((message) => (
+            message.id === id ? { ...message, ...updates } : message
+        )))
+        try {
+            const response = await adminApiFetch(`${API_ENDPOINTS.contacts}/${id}`, {
+                method: 'PATCH',
+                body: JSON.stringify(updates),
+            })
+            if (!response.ok) throw new Error('Could not update message')
+            const updated = await response.json()
+            setMessages((prev) => prev.map((message) => (
+                message.id === id ? updated : message
+            )))
+        } catch (error) {
+            toast.error(error.message || 'Message update failed')
+            load()
+        }
+    }
+
+    const selected = messages.find((message) => message.id === selectedId) || null
+
+    React.useEffect(() => {
+        if (selected && !isRead(selected)) markMessage(selected.id, { read: true })
+    }, [selectedId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+    const counts = messages.reduce((acc, message) => {
+        const status = statusOf(message)
+        acc.all += 1
+        if (status === 'archived') acc.archived += 1
+        else if (status === 'responded') acc.responded += 1
+        else if (!isRead(message)) acc.unread += 1
+        return acc
+    }, { all: 0, unread: 0, responded: 0, archived: 0 })
+
+    const filtered = messages.filter((message) => {
+        const status = statusOf(message)
+        const matchesFilter =
+            filter === 'all' ||
+            (filter === 'unread' && status !== 'archived' && !isRead(message)) ||
+            (filter === 'responded' && status === 'responded') ||
+            (filter === 'archived' && status === 'archived')
+        const query = search.trim().toLowerCase()
+        const matchesSearch = !query || [message.name, message.email, message.subject, message.message].some((value) => value?.toLowerCase().includes(query))
+        return matchesFilter && matchesSearch
+    })
+
+    const deleteMessage = async (id) => {
+        try {
+            const response = await adminApiFetch(`${API_ENDPOINTS.contacts}/${id}`, { method: 'DELETE' })
+            if (!response.ok) throw new Error('Could not delete message')
+            setMessages((prev) => prev.filter((message) => message.id !== id))
+            setSelectedId((prev) => prev === id ? null : prev)
+            toast.success('Message deleted')
+        } catch (error) {
+            toast.error(error.message || 'Delete failed')
+        }
+    }
+
+    const mailtoHref = selected
+        ? `mailto:${selected.email}?subject=${encodeURIComponent(`Re: ${selected.subject}`)}&body=${encodeURIComponent(`Hi ${selected.name},\n\n\n\n--\nNarendra Edu Valley\n\nOriginal message:\n${selected.message}`)}`
+        : '#'
+
+    if (loading) {
+        return (
+            <div className="grid gap-6 xl:grid-cols-[360px_1fr] animate-pulse">
+                <div className="h-[520px] rounded-2xl bg-slate-100" />
+                <div className="h-[520px] rounded-2xl bg-slate-100" />
+            </div>
+        )
+    }
+
+    return (
+        <div className="grid min-h-[560px] gap-6 xl:grid-cols-[380px_1fr]">
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                <div className="border-b border-slate-100 p-4">
+                    <div className="relative">
+                        <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                        <input
+                            type="search"
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            placeholder="Search messages"
+                            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-4 text-sm font-medium outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                        />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                        {[
+                            ['all', 'All', counts.all],
+                            ['unread', 'Unread', counts.unread],
+                            ['responded', 'Responded', counts.responded],
+                            ['archived', 'Archived', counts.archived],
+                        ].map(([id, label, count]) => (
+                            <button key={id} type="button" onClick={() => setFilter(id)}
+                                className={`rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${filter === id ? 'bg-brand-navy-700 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}`}>
+                                {label} {count}
                             </button>
                         ))}
                     </div>
+                </div>
 
-                    {/* Content Panel */}
-                    <div className="bg-white rounded-[2.5rem] shadow-xl shadow-slate-200/50 border border-slate-200 overflow-hidden">
-                        <div className="p-8 lg:p-12">
-                            {activeTab === 'events' && <EventsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'announcements' && <AnnouncementsManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'faculty' && <FacultyManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'gallery' && <GalleryManager showForm={showAddForm} setShowForm={setShowAddForm} getAuthHeaders={getAuthHeaders} />}
-                            {activeTab === 'erp' && <ERPManager getAuthHeaders={getAuthHeaders} />}
+                {filtered.length === 0 ? (
+                    <div className="p-6">
+                        <div className="rounded-2xl border border-dashed border-slate-300 p-8 text-center">
+                            <Inbox size={30} className="mx-auto mb-3 text-slate-300" />
+                            <p className="text-sm font-semibold text-slate-500">No messages match this filter.</p>
                         </div>
                     </div>
-                </div>
-            </section>
+                ) : (
+                    <div className="max-h-[640px] divide-y divide-slate-100 overflow-y-auto">
+                        {filtered.map((message) => {
+                            const unread = statusOf(message) !== 'archived' && !isRead(message)
+                            return (
+                                <button key={message.id} type="button" onClick={() => setSelectedId(message.id)}
+                                    className={`flex w-full gap-3 px-4 py-4 text-left transition-colors ${selectedId === message.id ? 'bg-brand-navy-50' : 'hover:bg-slate-50'}`}>
+                                    <span className={`mt-1 h-2.5 w-2.5 shrink-0 rounded-full ${unread ? 'bg-brand-crimson-500' : 'bg-transparent'}`} />
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center justify-between gap-3">
+                                            <p className="truncate text-sm font-semibold text-slate-900">{message.name}</p>
+                                            <time className="shrink-0 font-mono text-[11px] font-medium text-slate-400">{timeAgo(message.created_at)}</time>
+                                        </div>
+                                        <p className="mt-0.5 truncate text-xs font-semibold text-slate-600">{message.subject}</p>
+                                        <p className="mt-1 line-clamp-2 text-xs leading-5 text-slate-500">{message.message}</p>
+                                    </div>
+                                </button>
+                            )
+                        })}
+                    </div>
+                )}
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                {!selected ? (
+                    <div className="flex h-full min-h-[480px] flex-col items-center justify-center p-10 text-center">
+                        <MessageSquare size={42} className="mb-4 text-slate-300" />
+                        <p className="text-base font-semibold text-slate-600">Select a message from the list to view it.</p>
+                    </div>
+                ) : (
+                    <div className="flex h-full flex-col">
+                        <div className="border-b border-slate-100 p-6">
+                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                <div>
+                                    <div className="mb-2 flex flex-wrap items-center gap-2">
+                                        <span className="rounded-full bg-brand-navy-50 px-3 py-1 text-xs font-semibold text-brand-navy-700">{statusOf(selected)}</span>
+                                        <span className="inline-flex items-center gap-1 font-mono text-xs font-medium text-slate-400"><Clock size={13} /> {adminDate(selected.created_at)}</span>
+                                    </div>
+                                    <h2 className="font-display text-2xl font-bold text-slate-950">{selected.subject}</h2>
+                                    <p className="mt-1 text-sm font-medium text-slate-500">{selected.name} · {selected.email}{selected.phone ? ` · ${selected.phone}` : ''}</p>
+                                </div>
+                                <button type="button" onClick={() => deleteMessage(selected.id)} className="rounded-xl p-2 text-slate-400 hover:bg-rose-50 hover:text-rose-600" title="Delete message">
+                                    <Trash2 size={18} />
+                                </button>
+                            </div>
+                        </div>
+                        <div className="flex-1 p-6">
+                            <div className="whitespace-pre-wrap rounded-2xl bg-slate-50 p-5 text-sm leading-7 text-slate-700">{selected.message}</div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 p-4">
+                            <div className="flex flex-wrap gap-2">
+                                <button type="button" onClick={() => markMessage(selected.id, { status: 'responded', read: true })} className="inline-flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 hover:bg-emerald-100">
+                                    <CheckCircle2 size={16} /> Mark Responded
+                                </button>
+                                <button type="button" onClick={() => markMessage(selected.id, { status: 'archived', read: true })} className="inline-flex items-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                                    <Archive size={16} /> Archive
+                                </button>
+                            </div>
+                            <a href={mailtoHref} className="inline-flex items-center gap-2 rounded-xl bg-brand-navy-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-brand-navy-800">
+                                <Mail size={16} /> Reply via Email
+                            </a>
+                        </div>
+                    </div>
+                )}
+            </div>
         </div>
     )
 }
@@ -157,6 +787,7 @@ const ImagePicker = ({ onSelect, onClose }) => {
     const [images, setImages] = useState([])
     const [loading, setLoading] = useState(true)
     const [search, setSearch] = useState('')
+    const [uploading, setUploading] = useState(false)
 
     React.useEffect(() => {
         fetchImages()
@@ -174,25 +805,42 @@ const ImagePicker = ({ onSelect, onClose }) => {
         }
     }
 
-    const filteredImages = images.filter(img => 
-        img.title?.toLowerCase().includes(search.toLowerCase()) || 
+    const filteredImages = images.filter(img =>
+        img.title?.toLowerCase().includes(search.toLowerCase()) ||
         img.category?.toLowerCase().includes(search.toLowerCase())
     )
+
+    const uploadAndSelect = async (file) => {
+        if (!file) return
+        setUploading(true)
+        try {
+            const body = await buildImageUploadFormData(file)
+            const response = await fetch(API_ENDPOINTS.upload, { method: 'POST', body })
+            if (!response.ok) throw new Error('Upload failed')
+            const data = await response.json()
+            toast.success('Image uploaded')
+            onSelect(data.url)
+        } catch (error) {
+            toast.error(error.message || 'Image upload failed')
+        } finally {
+            setUploading(false)
+        }
+    }
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white w-full max-w-4xl max-h-[80vh] rounded-3xl overflow-hidden flex flex-col shadow-2xl">
                 <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                     <div>
-                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">Select Image</h3>
+                        <h3 className="text-xl font-display font-bold text-slate-900">Select Image</h3>
                         <p className="text-slate-500 text-sm">Choose from existing gallery images</p>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors">
                         <X size={24} className="text-slate-400" />
                     </button>
                 </div>
-                
-                <div className="p-4 bg-brand-cream border-b border-slate-100">
+
+                <div className="space-y-3 border-b border-slate-100 bg-brand-cream p-4">
                     <input
                         type="text"
                         placeholder="Search by title or category..."
@@ -201,6 +849,18 @@ const ImagePicker = ({ onSelect, onClose }) => {
                         onChange={(e) => setSearch(e.target.value)}
                         autoFocus
                     />
+                    <label
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                            event.preventDefault()
+                            uploadAndSelect(event.dataTransfer.files?.[0])
+                        }}
+                        className={`flex cursor-pointer items-center justify-center rounded-2xl border border-dashed border-brand-navy-200 bg-white px-4 py-5 text-sm font-semibold text-brand-navy-700 transition-all hover:border-brand-navy-400 ${uploading ? 'pointer-events-none opacity-60' : ''}`}
+                    >
+                        <input type="file" accept="image/*" className="hidden" onChange={(event) => uploadAndSelect(event.target.files?.[0])} />
+                        {uploading ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Image size={16} className="mr-2" />}
+                        Drag an image here or choose a file
+                    </label>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6">
@@ -221,10 +881,10 @@ const ImagePicker = ({ onSelect, onClose }) => {
                                     onClick={() => onSelect(img.image_url)}
                                     className="group relative aspect-square rounded-xl overflow-hidden bg-slate-100 border-2 border-transparent hover:border-brand-navy-500 transition-all focus:outline-none focus:ring-4 focus:ring-brand-navy-500/20"
                                 >
-                                    <img 
-                                        src={img.image_url} 
-                                        alt={img.title} 
-                                        className="w-full h-full object-cover" 
+                                    <img
+                                        src={img.image_url}
+                                        alt={img.title}
+                                        className="w-full h-full object-cover"
                                         loading="lazy"
                                     />
                                     <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors" />
@@ -242,6 +902,152 @@ const ImagePicker = ({ onSelect, onClose }) => {
     )
 }
 
+const ActivityManager = ({ getAuthHeaders }) => {
+    const [rows, setRows] = useState([])
+    const [loading, setLoading] = useState(true)
+
+    React.useEffect(() => {
+        adminApiFetch(`${API_BASE}/admin/activity`)
+            .then((response) => {
+                if (!response.ok) throw new Error('Could not load activity')
+                return response.json()
+            })
+            .then(setRows)
+            .catch((error) => toast.error(error.message || 'Activity failed to load'))
+            .finally(() => setLoading(false))
+    }, []) // eslint-disable-line
+
+    if (loading) {
+        return <div className="skeleton h-72 rounded-2xl" />
+    }
+
+    const entityTypes = Array.from(new Set(rows.map((row) => row.entity_type).filter(Boolean))).sort()
+
+    return (
+        <div className="space-y-5">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                <div>
+                    <h2 className="font-display text-2xl font-bold text-slate-950">Recent Activity</h2>
+                    <p className="text-sm font-medium text-slate-500">Server-side mutation history across admin and ERP actions.</p>
+                </div>
+            </div>
+            <DataTable
+                rows={rows}
+                searchPlaceholder="Search activity by actor, action, or entity"
+                emptyMessage="No activity has been recorded yet."
+                getRowKey={(row) => row.id}
+                filters={[
+                    {
+                        key: 'entity',
+                        label: 'All entities',
+                        accessor: (row) => row.entity_type,
+                        options: entityTypes.map((type) => ({ value: type, label: type.replaceAll('_', ' ') })),
+                    },
+                ]}
+                columns={[
+                    {
+                        key: 'created_at',
+                        header: 'When',
+                        accessor: (row) => row.created_at,
+                        sortValue: (row) => row.created_at,
+                        render: (row) => <span className="font-mono text-xs font-medium text-slate-600">{adminDate(row.created_at)} · {timeAgo(row.created_at)}</span>,
+                    },
+                    {
+                        key: 'actor',
+                        header: 'Actor',
+                        accessor: (row) => row.actor_email || row.actor_kind,
+                        render: (row) => <span className="font-semibold text-slate-900">{row.actor_email || row.actor_kind}</span>,
+                    },
+                    {
+                        key: 'action',
+                        header: 'Action',
+                        accessor: (row) => `${row.action} ${row.entity_type} ${row.entity_id || ''}`,
+                        render: (row) => (
+                            <div>
+                                <p className="font-semibold capitalize text-slate-900">{row.action}</p>
+                                <p className="text-xs font-medium text-slate-500">{row.entity_type.replaceAll('_', ' ')} {row.entity_id ? `#${row.entity_id}` : ''}</p>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'details',
+                        header: 'Details',
+                        sortable: false,
+                        searchable: false,
+                        export: false,
+                        render: (row) => (
+                            <details className="max-w-md">
+                                <summary className="cursor-pointer text-xs font-semibold text-brand-navy-600">View payload</summary>
+                                <pre className="mt-2 max-h-40 overflow-auto rounded-xl bg-slate-50 p-3 text-[11px] text-slate-600">
+                                    {JSON.stringify({ before: row.before_json ? JSON.parse(row.before_json) : null, after: row.after_json ? JSON.parse(row.after_json) : null }, null, 2)}
+                                </pre>
+                            </details>
+                        ),
+                    },
+                ]}
+            />
+        </div>
+    )
+}
+
+const AdminNotificationCenter = ({ getAuthHeaders }) => {
+    const [open, setOpen] = useState(false)
+    const [items, setItems] = useState([])
+
+    const load = async () => {
+        try {
+            const response = await adminApiFetch(`${API_BASE}/admin/notifications`)
+            if (!response.ok) throw new Error('Could not load notifications')
+            setItems(await response.json())
+        } catch {
+            setItems([])
+        }
+    }
+
+    React.useEffect(() => { load() }, []) // eslint-disable-line
+
+    const unread = items.filter((item) => !item.read)
+
+    const markRead = async (item) => {
+        if (item.read) return
+        const response = await adminApiFetch(`${API_BASE}/admin/notifications/${item.id}/read`, {
+            method: 'PATCH',
+        })
+        if (response.ok) {
+            const updated = await response.json()
+            setItems((current) => current.map((row) => row.id === item.id ? updated : row))
+        }
+    }
+
+    return (
+        <div className="relative">
+            <button type="button" onClick={() => setOpen((value) => !value)} className="relative rounded-xl border border-slate-200 bg-white p-3 text-slate-600 hover:bg-slate-50" aria-label="Notifications">
+                <Bell size={18} />
+                {unread.length > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-brand-crimson-600 px-1 text-[10px] font-bold text-white">{unread.length}</span>}
+            </button>
+            {open && (
+                <div className="absolute right-0 top-12 z-50 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl">
+                    <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
+                        <p className="font-bold text-slate-950">Notifications</p>
+                        <button type="button" onClick={load} className="text-xs font-semibold text-brand-navy-600">Refresh</button>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                        {items.length === 0 ? (
+                            <div className="p-6 text-center text-sm font-medium text-slate-500">No notifications yet.</div>
+                        ) : items.map((item) => (
+                            <button key={item.id} type="button" onClick={() => markRead(item)} className={`block w-full border-b border-slate-100 px-4 py-3 text-left last:border-0 ${item.read ? 'bg-white' : 'bg-brand-navy-50'}`}>
+                                <p className="text-sm font-bold text-slate-950">{item.title}</p>
+                                {item.body && <p className="mt-1 text-xs leading-5 text-slate-500">{item.body}</p>}
+                                <p className="mt-1 font-mono text-[11px] text-slate-400">{timeAgo(item.created_at)}</p>
+                            </button>
+                        ))}
+                    </div>
+                </div>
+            )}
+        </div>
+    )
+}
+
 // Events Manager Component
 const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const [events, setEvents] = useState([])
@@ -249,6 +1055,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [showImagePicker, setShowImagePicker] = useState(false)
+    const [showTrash, setShowTrash] = useState(false)
     const [formData, setFormData] = useState({
         title: '',
         description: '',
@@ -259,11 +1066,11 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     React.useEffect(() => {
         fetchEvents()
-    }, [])
+    }, [showTrash])
 
     const fetchEvents = async () => {
         try {
-            const response = await fetch(API_ENDPOINTS.events)
+            const response = await fetch(contentUrl(API_ENDPOINTS.events, showTrash), { headers: getAuthHeaders() })
             const data = await response.json()
             setEvents(data)
         } catch (error) {
@@ -276,8 +1083,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         if (!file) return
 
         setIsUploading(true)
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
+        const uploadFormData = await buildImageUploadFormData(file)
 
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
@@ -313,7 +1119,7 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
             })
 
             if (response.ok) {
-                toast.success(`Event ${editingId ? 'updated' : 'added'} successfully`)
+                toast.success('Event saved')
                 fetchEvents()
                 resetForm()
             } else {
@@ -336,24 +1142,38 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         })
         setEditingId(event.id)
         setShowForm(true)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const handleDelete = async (id) => {
+        const previous = events
+        deleteWithUndo({
+            label: 'Event',
+            onOptimisticRemove: () => setEvents((current) => current.filter((event) => event.id !== id)),
+            onUndo: () => setEvents(previous),
+            commit: async () => {
+                await commitContentDeletes(API_ENDPOINTS.events, [id], getAuthHeaders)
+            },
+        })
+    }
+
+    const handleBulkDelete = async (rows) => {
+        const ids = rows.map((event) => event.id)
+        const previous = events
+        deleteWithUndo({
+            label: `${ids.length} event${ids.length === 1 ? '' : 's'}`,
+            onOptimisticRemove: () => setEvents((current) => current.filter((event) => !ids.includes(event.id))),
+            onUndo: () => setEvents(previous),
+            commit: async () => commitContentDeletes(API_ENDPOINTS.events, ids, getAuthHeaders),
+        })
+    }
+
+    const handleRestore = async (ids) => {
         try {
-            const response = await fetch(`${API_ENDPOINTS.events}/${id}`, { 
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            })
-            if (response.ok) {
-                toast.success('Event deleted successfully')
-                fetchEvents()
-            } else {
-                const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-                toast.error(`Failed to delete event: ${error.detail || response.statusText}`)
-            }
+            await restoreContentRows(API_ENDPOINTS.events, ids, getAuthHeaders)
+            setEvents((current) => current.filter((event) => !ids.includes(event.id)))
+            toast.success(`${ids.length} event${ids.length === 1 ? '' : 's'} restored`)
         } catch (error) {
-            toast.error('Connection error: ' + error.message)
+            toast.error(error.message || 'Restore failed')
         }
     }
 
@@ -363,185 +1183,262 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         setShowForm(false)
     }
 
+    React.useEffect(() => {
+        if (!showForm && editingId) {
+            setFormData({ title: '', description: '', date: '', location: '', image_url: '' })
+            setEditingId(null)
+        }
+    }, [showForm, editingId])
+
     return (
         <div className="space-y-8 animate-fade-in">
-            {showForm && (
-                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                            {editingId ? 'Edit Event' : 'Create New Event'}
-                        </h3>
-                        <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 transition-colors">
-                            <Plus size={24} className="rotate-45" />
+            <SideSheet
+                open={showForm}
+                onClose={resetForm}
+                title={editingId ? 'Edit Event' : 'Create Event'}
+                description={editingId ? 'Update the selected event without losing your place in the list.' : 'Add a new event to the website calendar.'}
+                footer={(
+                    <div className="flex items-center justify-end gap-3">
+                        <button
+                            type="button"
+                            onClick={resetForm}
+                            className="rounded-xl px-4 py-2.5 text-sm font-semibold text-slate-500 hover:bg-slate-100"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="submit"
+                            form="event-manager-form"
+                            disabled={isSubmitting || isUploading}
+                            className="rounded-xl bg-brand-navy-700 px-5 py-2.5 text-sm font-semibold text-white shadow-lg shadow-brand-navy-700/20 hover:bg-brand-navy-800 disabled:opacity-50"
+                        >
+                            {isSubmitting ? 'Saving...' : 'Save Event'}
                         </button>
                     </div>
-                    <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Event Title</label>
+                )}
+            >
+                <form id="event-manager-form" onSubmit={handleSubmit} className="space-y-5">
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-slate-600">Event Title</label>
+                        <input
+                            type="text"
+                            placeholder="Enter event name..."
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                            value={formData.title}
+                            onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-slate-600">Event Description</label>
+                        <textarea
+                            placeholder="Describe the event details..."
+                            rows={5}
+                            className="w-full resize-none rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                            value={formData.description}
+                            onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-slate-600">Date</label>
+                        <input
+                            type="date"
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 font-mono text-sm text-slate-900 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                            value={formData.date}
+                            onChange={(e) => setFormData({ ...formData, date: e.target.value })}
+                            required
+                        />
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-slate-600">Location</label>
+                        <input
+                            type="text"
+                            placeholder="e.g., Auditorium OR Auditorium https://maps..."
+                            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                            value={formData.location}
+                            onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                        />
+                        <p className="mt-1 text-[11px] font-medium text-slate-400">Tip: Use a space to separate name and URL.</p>
+                    </div>
+                    <div>
+                        <label className="mb-2 block text-xs font-medium text-slate-600">Image</label>
+                        <div className="space-y-3">
+                            <div className="flex flex-col gap-2 sm:flex-row">
                                 <input
                                     type="text"
-                                    placeholder="Enter event name..."
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
-                                    value={formData.title}
-                                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                    required
+                                    placeholder="https://..."
+                                    className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-4 py-3 text-slate-900 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                                    value={formData.image_url}
+                                    onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Event Description</label>
-                                <textarea
-                                    placeholder="Describe the event details..."
-                                    rows={4}
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all resize-none"
-                                    value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <div className="space-y-4">
-                            <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Date</label>
-                                <input
-                                    type="date"
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
-                                    value={formData.date}
-                                    onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Location</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g., Auditorium OR Auditorium https://maps..."
-                                    className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
-                                    value={formData.location}
-                                    onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                                />
-                                <p className="mt-1 text-[10px] text-slate-400 font-medium italic">Tip: Use a space to separate name and URL</p>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Image</label>
-                                <div className="space-y-3">
-                                    <div className="flex gap-2">
+                                <div className="flex gap-2">
+                                    <label className={`flex items-center justify-center rounded-xl border border-slate-200 bg-slate-100 px-4 transition-all hover:bg-slate-200 ${isUploading ? 'pointer-events-none opacity-50' : 'cursor-pointer'}`}>
                                         <input
-                                            type="text"
-                                            placeholder="https://..."
-                                            className="flex-1 bg-white border border-slate-200 rounded-xl py-3 px-4 text-slate-900 outline-none focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-500/10 transition-all"
-                                            value={formData.image_url}
-                                            onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
+                                            type="file"
+                                            className="hidden"
+                                            accept="image/*"
+                                            onChange={handleImageUpload}
+                                            disabled={isUploading}
                                         />
-                                        <label className={`flex items-center justify-center px-4 bg-slate-100 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-200 transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            <input 
-                                                type="file" 
-                                                className="hidden" 
-                                                accept="image/*"
-                                                onChange={handleImageUpload}
-                                                disabled={isUploading}
-                                            />
-                                            {isUploading ? (
-                                                <div className="w-5 h-5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></div>
-                                            ) : (
-                                                <Image size={20} className="text-slate-500" />
-                                            )}
-                                        </label>
-                                        <button
-                                            type="button"
-                                            onClick={() => setShowImagePicker(true)}
-                                            className="px-4 py-3 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 font-bold text-sm transition-all"
-                                        >
-                                            Select from Gallery
-                                        </button>
-                                    </div>
-                                    {formData.image_url && (
-                                        <div className="relative w-full h-32 rounded-xl bg-slate-100 overflow-hidden border border-slate-200 group">
-                                            <img src={formData.image_url} alt="Preview" className="w-full h-full object-cover" />
-                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                <span className="text-white text-xs font-bold uppercase tracking-widest">Preview</span>
-                                            </div>
-                                        </div>
-                                    )}
+                                        {isUploading ? (
+                                            <Loader2 size={18} className="animate-spin text-slate-500" />
+                                        ) : (
+                                            <Image size={18} className="text-slate-500" />
+                                        )}
+                                    </label>
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowImagePicker(true)}
+                                        className="rounded-xl bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-600 transition-all hover:bg-slate-200"
+                                    >
+                                        Gallery
+                                    </button>
                                 </div>
                             </div>
+                            {formData.image_url && (
+                                <div className="relative h-36 w-full overflow-hidden rounded-xl border border-slate-200 bg-slate-100">
+                                    <img src={formData.image_url} alt="Preview" className="h-full w-full object-cover" />
+                                </div>
+                            )}
                         </div>
-                        <div className="md:col-span-2 flex items-center justify-end gap-4 pt-4 border-t border-slate-200/60">
-                            <button 
-                                type="button" 
-                                onClick={resetForm}
-                                className="px-6 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-200/50 transition-all"
-                            >
-                                Cancel
-                            </button>
-                            <button 
-                                type="submit" 
-                                disabled={isSubmitting || isUploading}
-                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
-                            >
-                                {isSubmitting ? 'Saving...' : editingId ? 'Update Event' : 'Save Event'}
-                            </button>
-                        </div>
-                    </form>
-                </div>
-            )}
+                    </div>
+                </form>
+            </SideSheet>
             {showImagePicker && (
-                <ImagePicker 
+                <ImagePicker
                     onSelect={(url) => {
                         setFormData({ ...formData, image_url: url })
                         setShowImagePicker(false)
-                    }} 
-                    onClose={() => setShowImagePicker(false)} 
+                    }}
+                    onClose={() => setShowImagePicker(false)}
                 />
             )}
 
-            <div className="overflow-x-auto rounded-3xl border border-slate-200">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-brand-cream border-b border-slate-200">
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Title</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Location</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {events.map((event) => (
-                            <tr key={event.id} className="hover:bg-brand-cream/50 transition-colors group">
-                                <td className="px-6 py-4 font-bold text-slate-900">{event.title}</td>
-                                <td className="px-6 py-4 text-slate-600 font-medium">
-                                    {new Date(event.date).toLocaleDateString('en-GB', {
-                                        day: '2-digit',
-                                        month: '2-digit',
-                                        year: 'numeric'
-                                    })}
-                                </td>
-                                <td className="px-6 py-4 text-slate-500 max-w-[200px] truncate">
-                                    {event.location?.startsWith('http') ? (
-                                        <a href={event.location} target="_blank" rel="noopener noreferrer" className="text-brand-navy-600 hover:underline">
-                                            View Map
-                                        </a>
-                                    ) : (
-                                        event.location || 'Not set'
-                                    )}
-                                </td>
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <button 
-                                            className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white transition-all shadow-sm"
+            <div className="flex justify-end">
+                <button
+                    type="button"
+                    onClick={() => {
+                        resetForm()
+                        setShowTrash((current) => !current)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                    <Archive size={16} />
+                    {showTrash ? 'Active Events' : 'Trash'}
+                </button>
+            </div>
+
+            <DataTable
+                rows={events}
+                searchPlaceholder={showTrash ? 'Search deleted events' : 'Search events by title, date, or location'}
+                emptyMessage={showTrash ? 'No deleted events in trash.' : 'No events match the current view.'}
+                getRowKey={(event) => event.id}
+                rowClassName={(event) => editingId === event.id ? 'bg-brand-navy-50' : 'hover:bg-brand-cream/50'}
+                bulkActions={showTrash ? [
+                    {
+                        label: 'Restore selected',
+                        icon: <CheckCircle2 size={15} />,
+                        onClick: (rows) => handleRestore(rows.map((event) => event.id)),
+                    },
+                ] : [
+                    {
+                        label: 'Delete selected',
+                        icon: <Trash2 size={15} />,
+                        tone: 'danger',
+                        onClick: handleBulkDelete,
+                    },
+                ]}
+                filters={[
+                    {
+                        key: 'period',
+                        label: 'All dates',
+                        accessor: (event) => {
+                            const eventDate = new Date(event.date)
+                            const todayDate = new Date(new Date().toDateString())
+                            return eventDate >= todayDate ? 'upcoming' : 'past'
+                        },
+                        options: [
+                            { value: 'upcoming', label: 'Upcoming' },
+                            { value: 'past', label: 'Past' },
+                        ],
+                    },
+                ]}
+                columns={[
+                    {
+                        key: 'title',
+                        header: 'Title',
+                        accessor: (event) => event.title,
+                        render: (event) => <span className="font-bold text-slate-900">{event.title}</span>,
+                    },
+                    {
+                        key: 'date',
+                        header: 'Date',
+                        accessor: (event) => event.date,
+                        sortValue: (event) => event.date,
+                        render: (event) => (
+                            <span className="font-mono text-sm font-medium text-slate-600">
+                                {new Date(event.date).toLocaleDateString('en-GB', {
+                                    day: '2-digit',
+                                    month: '2-digit',
+                                    year: 'numeric'
+                                })}
+                            </span>
+                        ),
+                    },
+                    {
+                        key: 'location',
+                        header: 'Location',
+                        accessor: (event) => event.location || '',
+                        render: (event) => (
+                            <span className="block max-w-[220px] truncate text-slate-500">
+                                {event.location?.startsWith('http') ? (
+                                    <a href={event.location} target="_blank" rel="noopener noreferrer" className="text-brand-navy-600 hover:underline">
+                                        View Map
+                                    </a>
+                                ) : (
+                                    event.location || 'Not set'
+                                )}
+                            </span>
+                        ),
+                    },
+                    {
+                        key: 'actions',
+                        header: 'Actions',
+                        sortable: false,
+                        searchable: false,
+                        export: false,
+                        className: 'text-right',
+                        cellClassName: 'text-right',
+                        render: (event) => (
+                            <div className="flex items-center justify-end gap-2">
+                                {showTrash ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-lg bg-emerald-50 p-2 text-emerald-700 shadow-sm transition-all hover:bg-emerald-600 hover:text-white"
+                                        onClick={() => handleRestore([event.id])}
+                                        title="Restore Event"
+                                    >
+                                        <CheckCircle2 size={16} />
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="rounded-lg bg-brand-navy-50 p-2 text-brand-navy-600 shadow-sm transition-all hover:bg-brand-navy-600 hover:text-white"
                                             onClick={() => handleEdit(event)}
                                             title="Edit Event"
                                         >
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(event.id)} />
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                    </>
+                                )}
+                            </div>
+                        ),
+                    },
+                ]}
+            />
         </div>
     )
 }
@@ -551,6 +1448,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const [announcements, setAnnouncements] = useState([])
     const [editingId, setEditingId] = useState(null)
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const [showTrash, setShowTrash] = useState(false)
     const [formData, setFormData] = useState({
         title: '',
         content: '',
@@ -559,11 +1457,11 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     React.useEffect(() => {
         fetchAnnouncements()
-    }, [])
+    }, [showTrash])
 
     const fetchAnnouncements = async () => {
         try {
-            const response = await fetch(API_ENDPOINTS.announcements)
+            const response = await fetch(contentUrl(API_ENDPOINTS.announcements, showTrash), { headers: getAuthHeaders() })
             const data = await response.json()
             setAnnouncements(data)
         } catch (error) {
@@ -606,24 +1504,38 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         })
         setEditingId(item.id)
         setShowForm(true)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const handleDelete = async (id) => {
+        const previous = announcements
+        deleteWithUndo({
+            label: 'Announcement',
+            onOptimisticRemove: () => setAnnouncements((current) => current.filter((item) => item.id !== id)),
+            onUndo: () => setAnnouncements(previous),
+            commit: async () => {
+                await commitContentDeletes(API_ENDPOINTS.announcements, [id], getAuthHeaders)
+            },
+        })
+    }
+
+    const handleBulkDelete = async (rows) => {
+        const ids = rows.map((item) => item.id)
+        const previous = announcements
+        deleteWithUndo({
+            label: `${ids.length} announcement${ids.length === 1 ? '' : 's'}`,
+            onOptimisticRemove: () => setAnnouncements((current) => current.filter((item) => !ids.includes(item.id))),
+            onUndo: () => setAnnouncements(previous),
+            commit: async () => commitContentDeletes(API_ENDPOINTS.announcements, ids, getAuthHeaders),
+        })
+    }
+
+    const handleRestore = async (ids) => {
         try {
-            const response = await fetch(`${API_ENDPOINTS.announcements}/${id}`, { 
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            })
-            if (response.ok) {
-                toast.success('Announcement removed')
-                fetchAnnouncements()
-            } else {
-                const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-                toast.error(`Delete failed: ${error.detail || response.statusText}`)
-            }
+            await restoreContentRows(API_ENDPOINTS.announcements, ids, getAuthHeaders)
+            setAnnouncements((current) => current.filter((item) => !ids.includes(item.id)))
+            toast.success(`${ids.length} announcement${ids.length === 1 ? '' : 's'} restored`)
         } catch (error) {
-            toast.error('Connection error: ' + error.message)
+            toast.error(error.message || 'Restore failed')
         }
     }
 
@@ -644,19 +1556,15 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            {showForm && (
-                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                            {editingId ? 'Edit Announcement' : 'Post New Announcement'}
-                        </h3>
-                        <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 transition-colors">
-                            <Plus size={24} className="rotate-45" />
-                        </button>
-                    </div>
+            <SideSheet
+                open={showForm}
+                onClose={resetForm}
+                title={editingId ? 'Edit Announcement' : 'Post Announcement'}
+                description="Keep the announcement list in view while creating or editing content."
+            >
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Title</label>
+                            <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Title</label>
                             <input
                                 type="text"
                                 placeholder="Give this announcement a catchy title..."
@@ -667,7 +1575,7 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Content</label>
+                            <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Content</label>
                             <textarea
                                 placeholder="Type the announcement details here..."
                                 rows={4}
@@ -678,16 +1586,16 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Priority Level</label>
+                            <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Priority Level</label>
                             <div className="flex flex-wrap gap-4">
                                 {['low', 'normal', 'high'].map((p) => (
                                     <button
                                         key={p}
                                         type="button"
                                         onClick={() => setFormData({...formData, priority: p})}
-                                        className={`px-6 py-2 rounded-lg border-2 font-black uppercase text-xs tracking-widest transition-all ${
-                                            formData.priority === p 
-                                            ? 'bg-brand-navy-600 border-brand-navy-600 text-white shadow-lg shadow-brand-navy-600/20' 
+                                        className={`px-6 py-2 rounded-lg border-2 text-xs font-semibold capitalize transition-all ${
+                                            formData.priority === p
+                                            ? 'bg-brand-navy-600 border-brand-navy-600 text-white shadow-lg shadow-brand-navy-600/20'
                                             : 'bg-white border-slate-200 text-slate-400 hover:border-slate-300'
                                         }`}
                                     >
@@ -698,51 +1606,124 @@ const AnnouncementsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                         </div>
                         <div className="flex items-center justify-end gap-4 pt-6 border-t border-slate-200/60">
                             <button type="button" onClick={resetForm} className="font-bold text-slate-500 px-6 py-3">Cancel</button>
-                            <button 
-                                type="submit" 
+                            <button
+                                type="submit"
                                 disabled={isSubmitting}
-                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-8 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-semibold px-8 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95"
                             >
                                 {isSubmitting ? 'Posting...' : editingId ? 'Update' : 'Post Now'}
                             </button>
                         </div>
                     </form>
-                </div>
-            )}
+            </SideSheet>
 
-            <div className="overflow-x-auto rounded-3xl border border-slate-200">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-brand-cream border-b border-slate-200">
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Title</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Priority</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {announcements.map((item) => (
-                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
-                                <td className="px-6 py-4 font-bold text-slate-900">{item.title}</td>
-                                <td className="px-6 py-4">
-                                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border ${getPriorityColor(item.priority)}`}>
-                                        {item.priority}
-                                    </span>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500 text-sm">{new Date(item.created_at).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
+            <div className="flex justify-end">
+                <button
+                    type="button"
+                    onClick={() => {
+                        resetForm()
+                        setShowTrash((current) => !current)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                    <Archive size={16} />
+                    {showTrash ? 'Active Announcements' : 'Trash'}
+                </button>
+            </div>
+
+            <DataTable
+                rows={announcements}
+                searchPlaceholder={showTrash ? 'Search deleted announcements' : 'Search announcements by title, content, or priority'}
+                emptyMessage={showTrash ? 'No deleted announcements in trash.' : 'No announcements match the current view.'}
+                getRowKey={(item) => item.id}
+                rowClassName={(item) => editingId === item.id ? 'bg-brand-navy-50' : 'hover:bg-brand-cream/50'}
+                bulkActions={showTrash ? [
+                    {
+                        label: 'Restore selected',
+                        icon: <CheckCircle2 size={15} />,
+                        onClick: (rows) => handleRestore(rows.map((item) => item.id)),
+                    },
+                ] : [
+                    {
+                        label: 'Delete selected',
+                        icon: <Trash2 size={15} />,
+                        tone: 'danger',
+                        onClick: handleBulkDelete,
+                    },
+                ]}
+                filters={[
+                    {
+                        key: 'priority',
+                        label: 'All priorities',
+                        accessor: (item) => item.priority || 'normal',
+                        options: [
+                            { value: 'high', label: 'High' },
+                            { value: 'normal', label: 'Normal' },
+                            { value: 'low', label: 'Low' },
+                        ],
+                    },
+                ]}
+                columns={[
+                    {
+                        key: 'title',
+                        header: 'Title',
+                        accessor: (item) => `${item.title} ${item.content}`,
+                        render: (item) => (
+                            <div>
+                                <p className="font-bold text-slate-900">{item.title}</p>
+                                <p className="mt-1 max-w-[420px] truncate text-sm text-slate-500">{item.content}</p>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'priority',
+                        header: 'Priority',
+                        accessor: (item) => item.priority || 'normal',
+                        render: (item) => (
+                            <span className={`rounded-full border px-3 py-1 text-xs font-semibold capitalize ${getPriorityColor(item.priority)}`}>
+                                {item.priority || 'normal'}
+                            </span>
+                        ),
+                    },
+                    {
+                        key: 'created_at',
+                        header: 'Date',
+                        accessor: (item) => item.created_at,
+                        sortValue: (item) => item.created_at,
+                        render: (item) => <span className="font-mono text-sm font-medium text-slate-600">{adminDate(item.created_at)}</span>,
+                    },
+                    {
+                        key: 'actions',
+                        header: 'Actions',
+                        sortable: false,
+                        searchable: false,
+                        export: false,
+                        className: 'text-right',
+                        cellClassName: 'text-right',
+                        render: (item) => (
+                            <div className="flex items-center justify-end gap-2">
+                                {showTrash ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-lg bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                                        onClick={() => handleRestore([item.id])}
+                                        title="Restore announcement"
+                                    >
+                                        <CheckCircle2 size={16} />
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button className="rounded-lg bg-brand-navy-50 p-2 text-brand-navy-600 hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                    </>
+                                )}
+                            </div>
+                        ),
+                    },
+                ]}
+            />
         </div>
     )
 }
@@ -754,6 +1735,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [showImagePicker, setShowImagePicker] = useState(false)
+    const [showTrash, setShowTrash] = useState(false)
     const [formData, setFormData] = useState({
         name: '',
         position: '',
@@ -766,11 +1748,11 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     React.useEffect(() => {
         fetchFaculty()
-    }, [])
+    }, [showTrash])
 
     const fetchFaculty = async () => {
         try {
-            const response = await fetch(API_ENDPOINTS.faculty)
+            const response = await fetch(contentUrl(API_ENDPOINTS.faculty, showTrash), { headers: getAuthHeaders() })
             const data = await response.json()
             setFaculty(data)
         } catch (error) {
@@ -783,8 +1765,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         if (!file) return
 
         setIsUploading(true)
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
+        const uploadFormData = await buildImageUploadFormData(file)
 
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
@@ -844,24 +1825,38 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         })
         setEditingId(item.id)
         setShowForm(true)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const handleDelete = async (id) => {
+        const previous = faculty
+        deleteWithUndo({
+            label: 'Faculty member',
+            onOptimisticRemove: () => setFaculty((current) => current.filter((item) => item.id !== id)),
+            onUndo: () => setFaculty(previous),
+            commit: async () => {
+                await commitContentDeletes(API_ENDPOINTS.faculty, [id], getAuthHeaders)
+            },
+        })
+    }
+
+    const handleBulkDelete = async (rows) => {
+        const ids = rows.map((item) => item.id)
+        const previous = faculty
+        deleteWithUndo({
+            label: `${ids.length} faculty member${ids.length === 1 ? '' : 's'}`,
+            onOptimisticRemove: () => setFaculty((current) => current.filter((item) => !ids.includes(item.id))),
+            onUndo: () => setFaculty(previous),
+            commit: async () => commitContentDeletes(API_ENDPOINTS.faculty, ids, getAuthHeaders),
+        })
+    }
+
+    const handleRestore = async (ids) => {
         try {
-            const response = await fetch(`${API_ENDPOINTS.faculty}/${id}`, { 
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            })
-            if (response.ok) {
-                toast.success('Member removed')
-                fetchFaculty()
-            } else {
-                const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-                toast.error(`Delete failed: ${error.detail || response.statusText}`)
-            }
+            await restoreContentRows(API_ENDPOINTS.faculty, ids, getAuthHeaders)
+            setFaculty((current) => current.filter((item) => !ids.includes(item.id)))
+            toast.success(`${ids.length} faculty member${ids.length === 1 ? '' : 's'} restored`)
         } catch (error) {
-            toast.error('Connection error: ' + error.message)
+            toast.error(error.message || 'Restore failed')
         }
     }
 
@@ -873,20 +1868,16 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            {showForm && (
-                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-2xl font-black text-slate-900 tracking-tight uppercase">
-                            {editingId ? 'Edit Faculty Member' : 'Add New Faculty Member'}
-                        </h3>
-                        <button onClick={resetForm} className="text-slate-400 hover:text-slate-600 transition-colors">
-                            <Plus size={24} className="rotate-45" />
-                        </button>
-                    </div>
+            <SideSheet
+                open={showForm}
+                onClose={resetForm}
+                title={editingId ? 'Edit Faculty Member' : 'Add Faculty Member'}
+                description="Create or update faculty profiles without losing list context."
+            >
                     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Full Name</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Full Name</label>
                                 <input
                                     type="text"
                                     placeholder="Full Name"
@@ -897,7 +1888,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Position</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Position</label>
                                 <input
                                     type="text"
                                     placeholder="e.g., Senior Principal"
@@ -908,7 +1899,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Department</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Department</label>
                                 <input
                                     type="text"
                                     placeholder="e.g., Mathematics"
@@ -921,7 +1912,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                         <div className="space-y-4">
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Email</label>
+                                    <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Email</label>
                                     <input
                                         type="email"
                                         placeholder="Email Address"
@@ -931,7 +1922,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Phone</label>
+                                    <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Phone</label>
                                     <input
                                         type="tel"
                                         placeholder="Phone Number"
@@ -942,7 +1933,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Short Bio</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Short Bio</label>
                                 <textarea
                                     placeholder="Tell us about this member..."
                                     rows={2}
@@ -952,7 +1943,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Profile Photo</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Profile Photo</label>
                                 <div className="space-y-3">
                                     <div className="flex gap-2">
                                         <input
@@ -963,9 +1954,9 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                             onChange={(e) => setFormData({ ...formData, image_url: e.target.value })}
                                         />
                                         <label className={`flex items-center justify-center px-4 bg-slate-100 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-200 transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            <input 
-                                                type="file" 
-                                                className="hidden" 
+                                            <input
+                                                type="file"
+                                                className="hidden"
                                                 accept="image/*"
                                                 onChange={handleImageUpload}
                                                 disabled={isUploading}
@@ -997,63 +1988,129 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                         </div>
                         <div className="md:col-span-2 flex items-center justify-end gap-4 pt-6 border-t border-slate-200/60">
                             <button type="button" onClick={resetForm} className="font-bold text-slate-500 px-6 py-3 hover:bg-slate-200/50 rounded-xl transition-all">Cancel</button>
-                            <button 
-                                type="submit" 
+                            <button
+                                type="submit"
                                 disabled={isSubmitting || isUploading}
-                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-semibold px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {isSubmitting ? 'Processing...' : editingId ? 'Update Member' : 'Add Member'}
                             </button>
                         </div>
                     </form>
-                </div>
-            )}
+            </SideSheet>
             {showImagePicker && (
-                <ImagePicker 
+                <ImagePicker
                     onSelect={(url) => {
                         setFormData({ ...formData, image_url: url })
                         setShowImagePicker(false)
-                    }} 
-                    onClose={() => setShowImagePicker(false)} 
+                    }}
+                    onClose={() => setShowImagePicker(false)}
                 />
             )}
 
-            <div className="overflow-x-auto rounded-3xl border border-slate-200">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-brand-cream border-b border-slate-200">
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Name</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Role</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Department</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {faculty.map((item) => (
-                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
-                                <td className="px-6 py-4">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-10 h-10 rounded-full bg-slate-200 overflow-hidden flex-shrink-0">
-                                            {item.image_url && <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />}
-                                        </div>
-                                        <span className="font-bold text-slate-900">{item.name}</span>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 text-slate-600 font-medium">{item.position}</td>
-                                <td className="px-6 py-4 text-slate-500">{item.department}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
+            <div className="flex justify-end">
+                <button
+                    type="button"
+                    onClick={() => {
+                        resetForm()
+                        setShowTrash((current) => !current)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                    <Archive size={16} />
+                    {showTrash ? 'Active Faculty' : 'Trash'}
+                </button>
+            </div>
+
+            <DataTable
+                rows={faculty}
+                searchPlaceholder={showTrash ? 'Search deleted faculty' : 'Search faculty by name, role, department, email, or phone'}
+                emptyMessage={showTrash ? 'No deleted faculty profiles in trash.' : 'No faculty profiles match the current view.'}
+                getRowKey={(item) => item.id}
+                rowClassName={(item) => editingId === item.id ? 'bg-brand-navy-50' : 'hover:bg-brand-cream/50'}
+                bulkActions={showTrash ? [
+                    {
+                        label: 'Restore selected',
+                        icon: <CheckCircle2 size={15} />,
+                        onClick: (rows) => handleRestore(rows.map((item) => item.id)),
+                    },
+                ] : [
+                    {
+                        label: 'Delete selected',
+                        icon: <Trash2 size={15} />,
+                        tone: 'danger',
+                        onClick: handleBulkDelete,
+                    },
+                ]}
+                filters={[
+                    {
+                        key: 'department',
+                        label: 'All departments',
+                        accessor: (item) => item.department || 'Unassigned',
+                        options: Array.from(new Set(faculty.map((item) => item.department || 'Unassigned'))).sort().map((department) => ({ value: department, label: department })),
+                    },
+                ]}
+                columns={[
+                    {
+                        key: 'name',
+                        header: 'Name',
+                        accessor: (item) => `${item.name} ${item.email || ''} ${item.phone || ''}`,
+                        render: (item) => (
+                            <div className="flex items-center gap-3">
+                                <div className="h-10 w-10 flex-shrink-0 overflow-hidden rounded-full bg-slate-200">
+                                    {item.image_url && <img src={item.image_url} alt={item.name} className="h-full w-full object-cover" />}
+                                </div>
+                                <div>
+                                    <p className="font-bold text-slate-900">{item.name}</p>
+                                    {item.email && <p className="text-xs text-slate-500">{item.email}</p>}
+                                </div>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'position',
+                        header: 'Role',
+                        accessor: (item) => item.position,
+                        render: (item) => <span className="font-medium text-slate-600">{item.position}</span>,
+                    },
+                    {
+                        key: 'department',
+                        header: 'Department',
+                        accessor: (item) => item.department || 'Unassigned',
+                        render: (item) => <span className="text-slate-500">{item.department || 'Unassigned'}</span>,
+                    },
+                    {
+                        key: 'actions',
+                        header: 'Actions',
+                        sortable: false,
+                        searchable: false,
+                        export: false,
+                        className: 'text-right',
+                        cellClassName: 'text-right',
+                        render: (item) => (
+                            <div className="flex items-center justify-end gap-2">
+                                {showTrash ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-lg bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                                        onClick={() => handleRestore([item.id])}
+                                        title="Restore faculty member"
+                                    >
+                                        <CheckCircle2 size={16} />
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button className="rounded-lg bg-brand-navy-50 p-2 text-brand-navy-600 hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                    </>
+                                )}
+                            </div>
+                        ),
+                    },
+                ]}
+            />
         </div>
     )
 }
@@ -1065,6 +2122,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [isUploading, setIsUploading] = useState(false)
     const [isAddingNewCategory, setIsAddingNewCategory] = useState(false)
+    const [showTrash, setShowTrash] = useState(false)
     const [formData, setFormData] = useState({
         title: '',
         image_url: '',
@@ -1074,11 +2132,11 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     React.useEffect(() => {
         fetchImages()
-    }, [])
+    }, [showTrash])
 
     const fetchImages = async () => {
         try {
-            const response = await fetch(API_ENDPOINTS.gallery)
+            const response = await fetch(contentUrl(API_ENDPOINTS.gallery, showTrash), { headers: getAuthHeaders() })
             const data = await response.json()
             setImages(data)
         } catch (error) {
@@ -1091,8 +2149,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         if (!file) return
 
         setIsUploading(true)
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
+        const uploadFormData = await buildImageUploadFormData(file)
 
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
@@ -1151,24 +2208,38 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         })
         setEditingId(item.id)
         setShowForm(true)
-        window.scrollTo({ top: 0, behavior: 'smooth' })
     }
 
     const handleDelete = async (id) => {
+        const previous = images
+        deleteWithUndo({
+            label: 'Gallery image',
+            onOptimisticRemove: () => setImages((current) => current.filter((item) => item.id !== id)),
+            onUndo: () => setImages(previous),
+            commit: async () => {
+                await commitContentDeletes(API_ENDPOINTS.gallery, [id], getAuthHeaders)
+            },
+        })
+    }
+
+    const handleBulkDelete = async (rows) => {
+        const ids = rows.map((item) => item.id)
+        const previous = images
+        deleteWithUndo({
+            label: `${ids.length} gallery image${ids.length === 1 ? '' : 's'}`,
+            onOptimisticRemove: () => setImages((current) => current.filter((item) => !ids.includes(item.id))),
+            onUndo: () => setImages(previous),
+            commit: async () => commitContentDeletes(API_ENDPOINTS.gallery, ids, getAuthHeaders),
+        })
+    }
+
+    const handleRestore = async (ids) => {
         try {
-            const response = await fetch(`${API_ENDPOINTS.gallery}/${id}`, { 
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            })
-            if (response.ok) {
-                toast.success('Image deleted')
-                fetchImages()
-            } else {
-                const error = await response.json().catch(() => ({ detail: 'Unknown error' }))
-                toast.error(`Delete failed: ${error.detail || response.statusText}`)
-            }
+            await restoreContentRows(API_ENDPOINTS.gallery, ids, getAuthHeaders)
+            setImages((current) => current.filter((item) => !ids.includes(item.id)))
+            toast.success(`${ids.length} gallery image${ids.length === 1 ? '' : 's'} restored`)
         } catch (error) {
-            toast.error('Connection error: ' + error.message)
+            toast.error(error.message || 'Restore failed')
         }
     }
 
@@ -1180,20 +2251,16 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
     return (
         <div className="space-y-8 animate-fade-in">
-            {showForm && (
-                <div className="bg-brand-cream p-6 md:p-8 rounded-3xl border border-slate-200 shadow-inner">
-                    <div className="flex items-center justify-between mb-6">
-                        <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">
-                            {editingId ? 'Edit Image Info' : 'Add New Gallery Image'}
-                        </h3>
-                        <button onClick={resetForm} className="text-slate-400 hover:text-slate-600">
-                            <Plus size={24} className="rotate-45" />
-                        </button>
-                    </div>
+            <SideSheet
+                open={showForm}
+                onClose={resetForm}
+                title={editingId ? 'Edit Image Info' : 'Add Gallery Image'}
+                description="Manage gallery metadata from a side panel."
+            >
                     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Image Title</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Image Title</label>
                                 <input
                                     type="text"
                                     placeholder="Enter title..."
@@ -1204,7 +2271,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 />
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Category</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Category</label>
                                 {isAddingNewCategory ? (
                                     <div className="flex gap-2 animate-fade-in">
                                         <input
@@ -1215,8 +2282,8 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                             onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                                             autoFocus
                                         />
-                                        <button 
-                                            type="button" 
+                                        <button
+                                            type="button"
                                             onClick={() => {
                                                 setIsAddingNewCategory(false)
                                                 setFormData({...formData, category: ''})
@@ -1257,12 +2324,12 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                                 type="button"
                                                 onClick={async () => {
                                                     if (!window.confirm(`Delete category "${formData.category}" from all images?`)) return
-                                                    
+
                                                     const imagesToUpdate = images.filter(img => img.category === formData.category)
                                                     const toastId = toast.loading(`Removing category from ${imagesToUpdate.length} images...`)
-                                                    
+
                                                     try {
-                                                        await Promise.all(imagesToUpdate.map(img => 
+                                                        await Promise.all(imagesToUpdate.map(img =>
                                                             fetch(`${API_ENDPOINTS.gallery}/${img.id}`, {
                                                                 method: 'PUT',
                                                                 headers: getAuthHeaders(),
@@ -1288,7 +2355,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                         </div>
                         <div className="space-y-4">
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Image</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Image</label>
                                 <div className="space-y-3">
                                     <div className="flex gap-2">
                                         <input
@@ -1300,9 +2367,9 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                             required
                                         />
                                         <label className={`flex items-center justify-center px-4 bg-slate-100 rounded-xl border border-slate-200 cursor-pointer hover:bg-slate-200 transition-all ${isUploading ? 'opacity-50 pointer-events-none' : ''}`}>
-                                            <input 
-                                                type="file" 
-                                                className="hidden" 
+                                            <input
+                                                type="file"
+                                                className="hidden"
                                                 accept="image/*"
                                                 onChange={handleImageUpload}
                                                 disabled={isUploading}
@@ -1325,7 +2392,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                 </div>
                             </div>
                             <div>
-                                <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">Description (Optional)</label>
+                                <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Description (Optional)</label>
                                 <textarea
                                     placeholder="Brief details about the photo..."
                                     rows={1}
@@ -1337,54 +2404,120 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                         </div>
                         <div className="md:col-span-2 flex items-center justify-end gap-4 pt-6 border-t border-slate-200/60">
                             <button type="button" onClick={resetForm} className="font-bold text-slate-500 px-6 py-3">Cancel</button>
-                            <button 
-                                type="submit" 
+                            <button
+                                type="submit"
                                 disabled={isSubmitting || isUploading}
-                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-black px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
+                                className="bg-brand-navy-600 hover:bg-brand-navy-700 text-white font-semibold px-10 py-3 rounded-xl shadow-lg shadow-brand-navy-600/20 transition-all active:scale-95 disabled:opacity-50 disabled:pointer-events-none"
                             >
                                 {isSubmitting ? 'Saving...' : editingId ? 'Update Info' : 'Add to Gallery'}
                             </button>
                         </div>
                     </form>
-                </div>
-            )}
+            </SideSheet>
 
-            <div className="overflow-x-auto rounded-3xl border border-slate-200">
-                <table className="w-full text-left border-collapse">
-                    <thead>
-                        <tr className="bg-brand-cream border-b border-slate-200">
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Preview</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Details</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest">Date</th>
-                            <th className="px-6 py-4 text-xs font-black text-slate-400 uppercase tracking-widest text-right">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                        {images.map((item) => (
-                            <tr key={item.id} className="hover:bg-brand-cream/50 transition-colors group">
-                                <td className="px-6 py-4">
-                                    <div className="w-20 h-14 rounded-lg bg-slate-100 overflow-hidden border border-slate-200">
-                                        <img src={item.image_url} alt={item.title} className="w-full h-full object-cover" />
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4">
-                                    <h4 className="font-bold text-slate-900">{item.title}</h4>
-                                    <span className="text-xs font-black text-brand-navy-500 uppercase tracking-widest">{item.category}</span>
-                                </td>
-                                <td className="px-6 py-4 text-slate-500 text-sm">{new Date(item.created_at).toLocaleDateString()}</td>
-                                <td className="px-6 py-4 text-right">
-                                    <div className="flex items-center justify-end gap-2">
-                                        <button className="p-2 bg-brand-navy-50 text-brand-navy-600 rounded-lg hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
+            <div className="flex justify-end">
+                <button
+                    type="button"
+                    onClick={() => {
+                        resetForm()
+                        setShowTrash((current) => !current)
+                    }}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+                >
+                    <Archive size={16} />
+                    {showTrash ? 'Active Gallery' : 'Trash'}
+                </button>
+            </div>
+
+            <DataTable
+                rows={images}
+                searchPlaceholder={showTrash ? 'Search deleted gallery images' : 'Search gallery by title, category, or description'}
+                emptyMessage={showTrash ? 'No deleted gallery images in trash.' : 'No gallery images match the current view.'}
+                getRowKey={(item) => item.id}
+                rowClassName={(item) => editingId === item.id ? 'bg-brand-navy-50' : 'hover:bg-brand-cream/50'}
+                bulkActions={showTrash ? [
+                    {
+                        label: 'Restore selected',
+                        icon: <CheckCircle2 size={15} />,
+                        onClick: (rows) => handleRestore(rows.map((item) => item.id)),
+                    },
+                ] : [
+                    {
+                        label: 'Delete selected',
+                        icon: <Trash2 size={15} />,
+                        tone: 'danger',
+                        onClick: handleBulkDelete,
+                    },
+                ]}
+                filters={[
+                    {
+                        key: 'category',
+                        label: 'All categories',
+                        accessor: (item) => item.category || 'Uncategorised',
+                        options: Array.from(new Set(images.map((item) => item.category || 'Uncategorised'))).sort().map((category) => ({ value: category, label: category })),
+                    },
+                ]}
+                columns={[
+                    {
+                        key: 'preview',
+                        header: 'Preview',
+                        accessor: (item) => item.title,
+                        render: (item) => (
+                            <div className="h-14 w-20 overflow-hidden rounded-lg border border-slate-200 bg-slate-100">
+                                <img src={item.image_url} alt={item.title} className="h-full w-full object-cover" />
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'details',
+                        header: 'Details',
+                        accessor: (item) => `${item.title} ${item.category || ''} ${item.description || ''}`,
+                        render: (item) => (
+                            <div>
+                                <h4 className="font-bold text-slate-900">{item.title}</h4>
+                                <span className="text-xs font-semibold text-brand-navy-600">{item.category || 'Uncategorised'}</span>
+                            </div>
+                        ),
+                    },
+                    {
+                        key: 'created_at',
+                        header: 'Date',
+                        accessor: (item) => item.created_at,
+                        sortValue: (item) => item.created_at,
+                        render: (item) => <span className="font-mono text-sm font-medium text-slate-600">{adminDate(item.created_at)}</span>,
+                    },
+                    {
+                        key: 'actions',
+                        header: 'Actions',
+                        sortable: false,
+                        searchable: false,
+                        export: false,
+                        className: 'text-right',
+                        cellClassName: 'text-right',
+                        render: (item) => (
+                            <div className="flex items-center justify-end gap-2">
+                                {showTrash ? (
+                                    <button
+                                        type="button"
+                                        className="rounded-lg bg-emerald-50 p-2 text-emerald-700 hover:bg-emerald-600 hover:text-white"
+                                        onClick={() => handleRestore([item.id])}
+                                        title="Restore gallery image"
+                                    >
+                                        <CheckCircle2 size={16} />
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button className="rounded-lg bg-brand-navy-50 p-2 text-brand-navy-600 hover:bg-brand-navy-600 hover:text-white" onClick={() => handleEdit(item)}>
                                             <Edit2 size={16} />
                                         </button>
                                         <DeleteAction onDelete={() => handleDelete(item.id)} />
-                                    </div>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+                                    </>
+                                )}
+                            </div>
+                        ),
+                    },
+                ]}
+            />
         </div>
     )
 }
@@ -1394,8 +2527,7 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
 
 const API_BASE = import.meta.env.VITE_API_URL || ''
 
-const ERPManager = ({ getAuthHeaders }) => {
-    const [section, setSection] = useState('teachers')
+const ERPManager = ({ getAuthHeaders, section = 'teachers', onSectionChange }) => {
     const [teachers, setTeachers] = useState([])
     const [classes, setClasses] = useState([])
     const [subjects, setSubjects] = useState([])
@@ -1406,8 +2538,11 @@ const ERPManager = ({ getAuthHeaders }) => {
     const [showAddSubject, setShowAddSubject] = useState(false)
     const [assigning, setAssigning] = useState(null) // teacher profile id being assigned
 
+    // Thin wrapper around the module-level adminApiFetch helper that also
+    // parses JSON and throws on non-OK responses (401s are already handled
+    // centrally inside adminApiFetch).
     const adminFetch = async (url, options = {}) => {
-        const res = await fetch(url, { ...options, headers: getAuthHeaders() })
+        const res = await adminApiFetch(url, options)
         const data = await res.json()
         if (!res.ok) throw new Error(data.detail || 'Request failed')
         return data
@@ -1449,13 +2584,13 @@ const ERPManager = ({ getAuthHeaders }) => {
 
     const Field = ({ label, ...props }) => (
         <div>
-            <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">{label}</label>
+            <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
             <input className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-brand-navy-500" {...props} />
         </div>
     )
 
     const AddTeacherForm = () => {
-        const [form, setForm] = useState({ full_name: '', email: '', phone: '', department: '', subject: '', class_teacher_of: '', password: 'teacher123' })
+        const [form, setForm] = useState({ full_name: '', email: '', phone: '', department: '', subject: '', class_teacher_of: '', password: '' })
         const [saving, setSaving] = useState(false)
         const submit = async (e) => {
             e.preventDefault()
@@ -1517,7 +2652,7 @@ const ERPManager = ({ getAuthHeaders }) => {
         }
         return (
             <form onSubmit={submit} className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-4 space-y-3">
-                <p className="text-xs font-black uppercase tracking-wider text-slate-500">Assign Class & Subject</p>
+                <p className="text-xs font-semibold text-slate-500">Assign Class & Subject</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                         <label className="block text-xs font-black text-slate-500 mb-1">Class Section</label>
@@ -1633,7 +2768,7 @@ const ERPManager = ({ getAuthHeaders }) => {
                     { id: 'fees', label: 'Fees', icon: <CreditCard size={16} /> },
                 ].map((s) => (
                     <button key={s.id} type="button"
-                        onClick={() => setSection(s.id)}
+                        onClick={() => onSectionChange ? onSectionChange(s.id) : null}
                         className={`flex items-center gap-2 rounded-xl border px-4 py-2 text-sm font-black transition-all ${section === s.id ? 'border-brand-navy-500 bg-brand-navy-600 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-brand-navy-300'}`}>
                         {s.icon}{s.label}
                     </button>
@@ -1679,7 +2814,7 @@ const ERPManager = ({ getAuthHeaders }) => {
 
                                     {expandedTeacher === t.profile.id && (
                                         <div className="border-t border-slate-100 p-5">
-                                            <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-3">Class Assignments</p>
+                                            <p className="text-xs font-semibold text-slate-400 mb-3">Class Assignments</p>
                                             {t.assignments.length === 0 ? (
                                                 <p className="text-sm font-bold text-slate-400 mb-3">No class assignments yet.</p>
                                             ) : (
@@ -1880,7 +3015,7 @@ const FeesManager = ({ adminFetch }) => {
         }
         return (
             <form onSubmit={submit} className="mt-3 rounded-xl border border-brand-navy-200 bg-brand-navy-50 p-4 space-y-3">
-                <p className="text-xs font-black uppercase tracking-wider text-brand-navy-700">New Invoice</p>
+                <p className="text-xs font-semibold text-brand-navy-700">New Invoice</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                         <label className="block text-xs font-black text-slate-500 mb-1">Title *</label>
@@ -1944,7 +3079,7 @@ const FeesManager = ({ adminFetch }) => {
         }
         return (
             <form onSubmit={submit} className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 p-4 space-y-3">
-                <p className="text-xs font-black uppercase tracking-wider text-emerald-700">Record Payment — {invoice.title}</p>
+                <p className="text-xs font-semibold text-emerald-700">Record Payment — {invoice.title}</p>
                 <p className="text-xs font-bold text-slate-500">Outstanding: {fmt(invoice.balance_paise)}</p>
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div>
@@ -1988,7 +3123,7 @@ const FeesManager = ({ adminFetch }) => {
                         { label: 'Outstanding', value: fmt(summary.outstanding_paise), color: 'bg-rose-100 text-rose-700' },
                     ].map((t) => (
                         <div key={t.label} className={`rounded-2xl ${t.color} px-5 py-4`}>
-                            <p className="text-xs font-black uppercase tracking-wider opacity-70">{t.label}</p>
+                            <p className="text-xs font-semibold opacity-70">{t.label}</p>
                             <p className="mt-1 text-xl font-black">{t.value}</p>
                         </div>
                     ))}
@@ -2038,7 +3173,7 @@ const FeesManager = ({ adminFetch }) => {
                                 <div className="border-t border-slate-100 p-4 space-y-3">
                                     {/* Invoices */}
                                     <div className="flex items-center justify-between">
-                                        <p className="text-xs font-black uppercase tracking-wider text-slate-400">Invoices</p>
+                                        <p className="text-xs font-semibold text-slate-400">Invoices</p>
                                         <button type="button"
                                             onClick={() => setAddingInvoice(addingInvoice === s.student_id ? null : s.student_id)}
                                             className="flex items-center gap-1 rounded-lg border border-dashed border-brand-navy-300 px-3 py-1.5 text-xs font-black text-brand-navy-600 hover:bg-brand-navy-50">
@@ -2088,7 +3223,7 @@ const FeesManager = ({ adminFetch }) => {
                                     {/* Payment history */}
                                     {s.payments.length > 0 && (
                                         <div>
-                                            <p className="text-xs font-black uppercase tracking-wider text-slate-400 mb-2">Payment History</p>
+                                            <p className="text-xs font-semibold text-slate-400 mb-2">Payment History</p>
                                             <div className="space-y-1.5">
                                                 {s.payments.map((p) => (
                                                     <div key={p.id} className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 gap-3">
@@ -2267,7 +3402,7 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
         <div className="space-y-6">
             <div className="flex items-end gap-3 flex-wrap">
                 <div>
-                    <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Class Section</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Class Section</label>
                     <select
                         value={selectedClassId}
                         onChange={(e) => { setSelectedClassId(e.target.value); setLoaded(false) }}
@@ -2280,7 +3415,7 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="block text-xs font-black uppercase tracking-wider text-slate-500 mb-1">Academic Year</label>
+                    <label className="block text-xs font-semibold text-slate-500 mb-1">Academic Year</label>
                     <input
                         value={academicYear}
                         onChange={(e) => setAcademicYear(e.target.value)}
@@ -2308,7 +3443,7 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
                     {/* Period structure */}
                     <div>
                         <div className="flex items-center justify-between mb-3">
-                            <h3 className="text-sm font-black uppercase tracking-wider text-slate-500">
+                            <h3 className="text-sm font-semibold text-slate-500">
                                 Period Times — Class {selectedClass?.class_name}-{selectedClass?.section}
                             </h3>
                             <div className="flex gap-2">
@@ -2325,7 +3460,7 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
                         <div className="overflow-x-auto">
                             <table className="w-full min-w-[480px] text-sm border-collapse">
                                 <thead>
-                                    <tr className="border-b border-slate-200 text-xs font-black uppercase tracking-wider text-slate-400">
+                                    <tr className="border-b border-slate-200 text-xs font-semibold text-slate-400">
                                         <th className="pb-2 pr-4 text-left w-12">No.</th>
                                         <th className="pb-2 pr-4 text-left">Start</th>
                                         <th className="pb-2 pr-4 text-left">End</th>
@@ -2363,14 +3498,14 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
 
                     {/* Weekly schedule grid */}
                     <div>
-                        <h3 className="text-sm font-black uppercase tracking-wider text-slate-500 mb-3">Weekly Schedule</h3>
+                        <h3 className="text-sm font-semibold text-slate-500 mb-3">Weekly Schedule</h3>
                         <div className="overflow-x-auto">
                             <table className="min-w-[700px] border-collapse text-sm">
                                 <thead>
                                     <tr className="border-b border-slate-200">
-                                        <th className="pb-2 pr-3 text-left text-xs font-black uppercase tracking-wider text-slate-400 w-24">Period</th>
+                                        <th className="pb-2 pr-3 text-left text-xs font-semibold text-slate-400 w-24">Period</th>
                                         {DAYS.map((d) => (
-                                            <th key={d} className="pb-2 px-2 text-center text-xs font-black uppercase tracking-wider text-slate-400">{d}</th>
+                                            <th key={d} className="pb-2 px-2 text-center text-xs font-semibold text-slate-400">{d}</th>
                                         ))}
                                     </tr>
                                 </thead>
@@ -2384,7 +3519,7 @@ const TimetableEditor = ({ classes, subjects, teachers, adminFetch }) => {
                                                 )}
                                             </td>
                                             {p.is_break ? (
-                                                <td colSpan={6} className="py-2 px-2 text-center text-xs font-black uppercase tracking-wider text-amber-600">
+                                                <td colSpan={6} className="py-2 px-2 text-center text-xs font-semibold text-amber-600">
                                                     — Break —
                                                 </td>
                                             ) : (
