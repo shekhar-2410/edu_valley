@@ -1,6 +1,7 @@
-import { Calendar, MapPin, X } from 'lucide-react'
+import { Calendar, MapPin, Search, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { Link } from 'react-router-dom'
 import { API_ENDPOINTS } from '../config/api'
 
 const Events = () => {
@@ -9,6 +10,8 @@ const Events = () => {
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState(false)
     const [selectedEvent, setSelectedEvent] = useState(null)
+    const [searchQuery, setSearchQuery] = useState('')
+    const [filter, setFilter] = useState('all') // 'all' | 'upcoming' | 'past'
 
     useEffect(() => {
         fetchEvents()
@@ -59,8 +62,21 @@ const Events = () => {
         return t(key, { defaultValue: str });
     }
 
-    const upcomingEvents = events.filter(event => isUpcoming(event.date))
-    const pastEvents = events.filter(event => !isUpcoming(event.date))
+    const searchedEvents = events.filter((e) => {
+        if (!searchQuery) return true
+        const q = searchQuery.toLowerCase()
+        return (
+            e.title?.toLowerCase().includes(q) ||
+            e.description?.toLowerCase().includes(q) ||
+            e.location?.toLowerCase().includes(q)
+        )
+    })
+
+    const upcomingEvents = searchedEvents.filter(event => isUpcoming(event.date))
+    const pastEvents = searchedEvents.filter(event => !isUpcoming(event.date))
+
+    const showUpcoming = filter === 'all' || filter === 'upcoming'
+    const showPast = filter === 'all' || filter === 'past'
 
     if (loading) {
         return (
@@ -115,10 +131,44 @@ const Events = () => {
                 </div>
             </section>
 
+            {/* Search + Filter */}
+            <section className="pt-10 md:pt-16">
+                <div className="container mx-auto px-4">
+                    <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
+                        <div className="relative flex-1">
+                            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy-400" />
+                            <input
+                                type="search"
+                                placeholder={t('events.search_placeholder', { defaultValue: 'Search events…' })}
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                className="w-full pl-12 pr-4 py-3 rounded-xl bg-white border border-brand-navy-200 text-brand-navy-900 focus:outline-none focus:ring-2 focus:ring-brand-navy-300"
+                            />
+                        </div>
+                        <div className="inline-flex gap-2 rounded-xl bg-white border border-brand-navy-200 p-1 self-start md:self-auto">
+                            {['all', 'upcoming', 'past'].map((f) => (
+                                <button
+                                    key={f}
+                                    type="button"
+                                    onClick={() => setFilter(f)}
+                                    className={`px-4 py-2 rounded-lg text-sm font-semibold capitalize transition ${
+                                        filter === f
+                                            ? 'bg-brand-navy-700 text-white'
+                                            : 'text-brand-navy-600 hover:bg-brand-navy-50'
+                                    }`}
+                                >
+                                    {t(`events.filter_${f}`, { defaultValue: f })}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            </section>
+
             {/* Upcoming Events */}
             <section className="py-12 md:py-24 bg-white">
                 <div className="container mx-auto px-4">
-                    {upcomingEvents.length > 0 && (
+                    {showUpcoming && upcomingEvents.length > 0 && (
                         <div className="mb-12 md:mb-24">
                              <div className="flex items-center justify-between mb-8 md:mb-12">
                                 <h2 className="text-3xl lg:text-4xl font-extrabold text-brand-navy-900 border-l-8 border-brand-crimson-600 pl-6">{t('events.upcoming')}</h2>
@@ -127,7 +177,7 @@ const Events = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {upcomingEvents.map((event) => (
-                                    <div key={event.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-brand-navy-100/50 flex flex-col h-full">
+                                    <Link key={event.id} to={`/events/${event.id}`} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border border-brand-navy-100/50 flex flex-col h-full">
                                         <div className="relative h-56 overflow-hidden">
                                             {event.image_url ? (
                                                 <img src={event.image_url} alt={event.title} className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" />
@@ -156,20 +206,18 @@ const Events = () => {
                                             <p className="text-brand-navy-500 text-sm leading-relaxed mb-6 line-clamp-3">{translateDynamic(event.description, 'events')}</p>
 
                                             <div className="mt-auto">
-                                                <button
-                                                    onClick={() => setSelectedEvent(event)}
-                                                    className="w-full py-3 rounded-xl bg-brand-navy-50 text-brand-navy-600 font-bold hover:bg-brand-crimson-600 hover:text-white transition-all duration-300 text-sm">
+                                                <span className="block w-full text-center py-3 rounded-xl bg-brand-navy-50 text-brand-navy-600 font-bold group-hover:bg-brand-crimson-600 group-hover:text-white transition-all duration-300 text-sm">
                                                     {t('events.learn_more')}
-                                                </button>
+                                                </span>
                                             </div>
                                         </div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
                     )}
 
-                    {pastEvents.length > 0 && (
+                    {showPast && pastEvents.length > 0 && (
                         <div className="mb-12">
                             <div className="flex items-center justify-between mb-8 md:mb-12">
                                 <h2 className="text-3xl lg:text-4xl font-extrabold text-brand-navy-300 border-l-8 border-brand-navy-300 pl-6">{t('events.past')}</h2>
@@ -178,7 +226,7 @@ const Events = () => {
 
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                 {pastEvents.map((event) => (
-                                    <div key={event.id} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg border border-brand-navy-100/50 flex flex-col h-full hover:shadow-xl transition-all duration-500 grayscale hover:grayscale-0">
+                                    <Link key={event.id} to={`/events/${event.id}`} className="group bg-white rounded-[2rem] overflow-hidden shadow-lg border border-brand-navy-100/50 flex flex-col h-full hover:shadow-xl transition-all duration-500 grayscale hover:grayscale-0">
                                         <div className="relative h-48 overflow-hidden">
                                             {event.image_url ? (
                                                 <img src={event.image_url} alt={event.title} className="w-full h-full object-cover" />
@@ -203,7 +251,7 @@ const Events = () => {
                                             )}
                                             <p className="text-brand-navy-400 text-sm leading-relaxed line-clamp-2">{translateDynamic(event.description, 'events')}</p>
                                         </div>
-                                    </div>
+                                    </Link>
                                 ))}
                             </div>
                         </div>
@@ -225,6 +273,17 @@ const Events = () => {
                             <Calendar size={64} className="mx-auto text-brand-navy-200 mb-6" />
                             <h3 className="text-2xl font-bold text-brand-navy-900 mb-2">{t('events.no_events')}</h3>
                             <p className="text-brand-navy-400">{t('events.try_different')}</p>
+                        </div>
+                    )}
+
+                    {!error && events.length > 0 && (
+                        (!showUpcoming || upcomingEvents.length === 0) &&
+                        (!showPast || pastEvents.length === 0)
+                    ) && (
+                        <div className="text-center py-20 bg-brand-cream rounded-[3rem]">
+                            <Search size={48} className="mx-auto text-brand-navy-200 mb-6" />
+                            <h3 className="text-2xl font-bold text-brand-navy-900 mb-2">{t('events.no_results_title', { defaultValue: 'No matching events' })}</h3>
+                            <p className="text-brand-navy-400">{t('events.no_results_desc', { defaultValue: 'Try a different search term or filter.' })}</p>
                         </div>
                     )}
                 </div>
