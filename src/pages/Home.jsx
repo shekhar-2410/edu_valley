@@ -271,30 +271,6 @@ const Home = () => {
                 </div>
             </section>
 
-            {/* Newsletter - Subscribe Section */}
-            <section className="py-20 md:py-32">
-                <div className="container mx-auto px-4">
-                    <div className="bg-brand-navy-900 rounded-[4rem] p-10 md:p-20 lg:p-24 flex flex-col lg:flex-row justify-between items-center text-center lg:text-left gap-12 shadow-2xl relative overflow-hidden">
-                        <div className="absolute top-0 right-0 w-1/2 h-full bg-brand-crimson-600/5 skew-x-[-15deg] translate-x-32"></div>
-                        <div className="max-w-xl relative z-10">
-                            <h2 className="text-4xl md:text-5xl lg:text-6xl font-black text-white mb-8 leading-[1.1] tracking-tight">
-                                {t('home.newsletter_title')}
-                            </h2>
-                            <p className="text-brand-navy-300 text-xl font-medium">{t('home.newsletter_desc')}</p>
-                        </div>
-                        <div className="w-full max-w-lg bg-white/5 p-3 rounded-[2.5rem] flex flex-col md:flex-row gap-3 shadow-inner border border-white/10 backdrop-blur-sm relative z-10">
-                            <input
-                                type="email"
-                                placeholder={t('home.email_placeholder')}
-                                className="flex-1 bg-transparent border-none outline-none px-8 py-5 text-white placeholder:text-brand-navy-400 font-bold text-lg"
-                            />
-                            <button className="bg-brand-crimson-600 hover:bg-white hover:text-brand-crimson-600 text-white font-black py-5 px-10 rounded-2xl transition-all active:scale-95 shadow-xl shadow-brand-crimson-600/20 whitespace-nowrap text-lg">
-                                {t('home.subscribe_btn')}
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </section>
         </div>
     )
 }
