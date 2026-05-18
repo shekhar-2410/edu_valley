@@ -1915,6 +1915,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Email</label>
                                     <input
                                         type="email"
+                                        inputMode="email"
                                         placeholder="Email Address"
                                         className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.email}
@@ -1925,6 +1926,7 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
                                     <label className="mb-2 ml-1 block text-xs font-medium text-slate-600">Phone</label>
                                     <input
                                         type="tel"
+                                        inputMode="tel"
                                         placeholder="Phone Number"
                                         className="w-full bg-white border border-slate-200 rounded-xl py-3 px-4 outline-none focus:border-brand-navy-500 transition-all"
                                         value={formData.phone}
@@ -2582,12 +2584,28 @@ const ERPManager = ({ getAuthHeaders, section = 'teachers', onSectionChange }) =
         }
     }
 
-    const Field = ({ label, ...props }) => (
-        <div>
-            <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
-            <input className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-brand-navy-500" {...props} />
-        </div>
-    )
+    const Field = ({ label, ...props }) => {
+        // Auto-derive mobile keyboard hints when not explicitly provided
+        const type = props.type
+        const inputMode = props.inputMode ?? (
+            type === 'tel' ? 'tel'
+                : type === 'email' ? 'email'
+                    : type === 'number' ? 'numeric'
+                        : undefined
+        )
+        const pattern = props.pattern ?? (type === 'number' ? '[0-9]*' : undefined)
+        return (
+            <div>
+                <label className="block text-xs font-semibold text-slate-500 mb-1">{label}</label>
+                <input
+                    className="w-full border border-slate-200 rounded-xl px-3 py-2.5 text-sm font-bold outline-none focus:border-brand-navy-500"
+                    {...props}
+                    inputMode={inputMode}
+                    pattern={pattern}
+                />
+            </div>
+        )
+    }
 
     const AddTeacherForm = () => {
         const [form, setForm] = useState({ full_name: '', email: '', phone: '', department: '', subject: '', class_teacher_of: '', password: '' })
@@ -2612,7 +2630,7 @@ const ERPManager = ({ getAuthHeaders, section = 'teachers', onSectionChange }) =
                 <form onSubmit={submit} className="grid gap-3 sm:grid-cols-2">
                     <Field label="Full Name" value={form.full_name} onChange={(e) => setForm({ ...form, full_name: e.target.value })} required />
                     <Field label="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} required />
-                    <Field label="Phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                    <Field label="Phone" type="tel" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
                     <Field label="Department" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
                     <Field label="Primary Subject" value={form.subject} onChange={(e) => setForm({ ...form, subject: e.target.value })} />
                     <Field label="Initial Password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
@@ -3031,7 +3049,7 @@ const FeesManager = ({ adminFetch }) => {
                     </div>
                     <div>
                         <label className="block text-xs font-black text-slate-500 mb-1">Amount (₹) *</label>
-                        <input type="number" step="0.01" min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required
+                        <input type="number" inputMode="decimal" step="0.01" min="1" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required
                             placeholder="e.g. 15000"
                             className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-brand-navy-500" />
                     </div>
@@ -3084,7 +3102,7 @@ const FeesManager = ({ adminFetch }) => {
                 <div className="grid gap-3 sm:grid-cols-2">
                     <div>
                         <label className="block text-xs font-black text-slate-500 mb-1">Amount (₹)</label>
-                        <input type="number" step="0.01" min="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required
+                        <input type="number" inputMode="decimal" step="0.01" min="0.01" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} required
                             className="w-full border border-slate-200 rounded-xl px-3 py-2 text-sm font-bold outline-none focus:border-emerald-500" />
                     </div>
                     <div>

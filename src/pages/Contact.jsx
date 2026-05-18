@@ -198,6 +198,7 @@ const Contact = () => {
                                             <input
                                                 id="contact-email"
                                                 type="email"
+                                                inputMode="email"
                                                 name="email"
                                                 value={formData.email}
                                                 onChange={handleChange}
@@ -213,6 +214,7 @@ const Contact = () => {
                                             <input
                                                 id="contact-phone"
                                                 type="tel"
+                                                inputMode="tel"
                                                 name="phone"
                                                 value={formData.phone}
                                                 onChange={handleChange}

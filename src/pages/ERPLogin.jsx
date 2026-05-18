@@ -170,6 +170,7 @@ const ERPLogin = () => {
                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={19} />
                                 <input
                                     type="email"
+                                    inputMode="email"
                                     value={credentials.email}
                                     onChange={(event) => setCredentials({ ...credentials, email: event.target.value })}
                                     className="w-full rounded-xl border border-slate-200 bg-white py-4 pl-12 pr-4 font-bold text-slate-800 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"

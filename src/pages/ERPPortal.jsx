@@ -226,20 +226,32 @@ const Info = ({ label, value }) => (
     </div>
 )
 
-const Field = ({ label, value, onChange, type = 'text', required = false, children }) => (
-    <div>
-        <label className="mb-1.5 block text-xs font-medium text-slate-600">{label}</label>
-        {children || (
-            <input
-                type={type}
-                value={value}
-                onChange={(e) => onChange(e.target.value)}
-                className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-bold text-slate-800 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
-                required={required}
-            />
-        )}
-    </div>
-)
+const Field = ({ label, value, onChange, type = 'text', required = false, inputMode, pattern, children }) => {
+    // Derive sensible mobile keyboard hints from `type` when not explicitly provided
+    const resolvedInputMode = inputMode ?? (
+        type === 'tel' ? 'tel'
+            : type === 'email' ? 'email'
+                : type === 'number' ? 'numeric'
+                    : undefined
+    )
+    const resolvedPattern = pattern ?? (type === 'number' ? '[0-9]*' : undefined)
+    return (
+        <div>
+            <label className="mb-1.5 block text-xs font-medium text-slate-600">{label}</label>
+            {children || (
+                <input
+                    type={type}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base font-bold text-slate-800 outline-none transition-all focus:border-brand-navy-500 focus:ring-4 focus:ring-brand-navy-100"
+                    required={required}
+                    inputMode={resolvedInputMode}
+                    pattern={resolvedPattern}
+                />
+            )}
+        </div>
+    )
+}
 
 // ── Change Password Modal ─────────────────────────────────────────────────────
 
@@ -3520,6 +3532,8 @@ const TeacherMarks = ({ dashboard, createMark, studentMap, refreshDashboard }) =
                                                 <td className="px-5 py-3">
                                                     <input
                                                         type="number"
+                                                        inputMode="numeric"
+                                                        pattern="[0-9]*"
                                                         min="0"
                                                         max={maxMarks > 0 ? maxMarks : undefined}
                                                         value={value}
@@ -3553,6 +3567,8 @@ const TeacherMarks = ({ dashboard, createMark, studentMap, refreshDashboard }) =
                                         </div>
                                         <input
                                             type="number"
+                                            inputMode="numeric"
+                                            pattern="[0-9]*"
                                             min="0"
                                             max={maxMarks > 0 ? maxMarks : undefined}
                                             value={value}

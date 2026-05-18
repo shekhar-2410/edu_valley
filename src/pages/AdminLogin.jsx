@@ -95,6 +95,7 @@ const AdminLogin = () => {
                                 <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-brand-navy-400 group-focus-within:text-brand-gold-400 transition-colors" size={20} />
                                 <input
                                     type="email"
+                                    inputMode="email"
                                     placeholder="admin@nev.edu"
                                     className="w-full bg-brand-navy-900/50 border border-brand-navy-700 rounded-2xl py-4 pl-12 pr-4 text-white outline-none focus:border-brand-gold-500 focus:ring-4 focus:ring-brand-gold-500/10 transition-all"
                                     value={credentials.email}
