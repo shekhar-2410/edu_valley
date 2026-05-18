@@ -676,6 +676,15 @@ def health(db: Session = Depends(get_db)):
 def ping():
     return {"message": "pong"}
 
+@app.get("/admin/me")
+@app.get("/api/admin/me")
+def get_admin_me(admin=Depends(get_current_admin)):
+    """Lightweight endpoint used by the admin login page to validate that a
+    stored bearer token is still good before auto-redirecting into the
+    dashboard. Returns 401 (via get_current_admin) if the token is missing,
+    forged, expired, or no longer maps to an admin account."""
+    return {"id": admin.id, "email": admin.email, "is_admin": admin.is_admin}
+
 @app.get("/admin/activity", response_model=List[schemas.AuditLogOut])
 @app.get("/api/admin/activity", response_model=List[schemas.AuditLogOut])
 def get_admin_activity(

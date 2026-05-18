@@ -11,9 +11,30 @@ const AdminLogin = () => {
 
     useEffect(() => {
         const token = localStorage.getItem('adminToken');
-        if (token) {
-            navigate('/admin');
-        }
+        if (!token) return;
+
+        // Validate the stored token with the backend before auto-redirecting.
+        // An expired/forged token must NOT drop the user into a half-broken
+        // dashboard; clear it and let them log in again instead.
+        let cancelled = false;
+        fetch(API_ENDPOINTS.adminMe, {
+            headers: { 'Authorization': `Bearer ${token}` },
+        })
+            .then((response) => {
+                if (cancelled) return;
+                if (response.ok) {
+                    navigate('/admin');
+                } else {
+                    localStorage.removeItem('adminToken');
+                    localStorage.removeItem('adminAuthenticated');
+                }
+            })
+            .catch(() => {
+                // Network error — leave the token in place so the user can
+                // still log in normally once connectivity returns.
+            });
+
+        return () => { cancelled = true; };
     }, [navigate]);
 
     const handleSubmit = async (e) => {

@@ -8,6 +8,7 @@ export const API_ENDPOINTS = {
     gallery: `${API_BASE_URL}/gallery`,
     contacts: `${API_BASE_URL}/contacts`,
     login: `${API_BASE_URL}/auth/login`,
+    adminMe: `${API_BASE_URL}/admin/me`,
     upload: `${API_BASE_URL}/upload`,
     images: `${API_BASE_URL}/images`,
     erpLogin: `${API_BASE_URL}/erp/auth/login`,
