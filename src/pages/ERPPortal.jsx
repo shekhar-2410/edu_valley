@@ -614,12 +614,17 @@ const ERPPortal = () => {
                 prefill: { name: user?.full_name, email: user?.email, contact: dashboard?.profile?.guardian_phone },
                 theme: { color: '#1B3A6B' },
                 handler: async (response) => {
-                    await apiRequest(API_ENDPOINTS.erpRazorpayVerify, {
-                        method: 'POST',
-                        body: JSON.stringify({ invoice_id: invoice.id, ...response }),
-                    })
-                    toast.success('Payment verified')
-                    fetchDashboard()
+                    try {
+                        await apiRequest(API_ENDPOINTS.erpRazorpayVerify, {
+                            method: 'POST',
+                            body: JSON.stringify({ invoice_id: invoice.id, ...response }),
+                        })
+                        toast.success('Payment verified')
+                        fetchDashboard()
+                    } catch (err) {
+                        toast.error('Payment verification failed. Please contact support if the amount was deducted.')
+                        console.error('Razorpay verify error:', err)
+                    }
                 },
             })
             checkout.on('payment.failed', (r) => toast.error(r.error?.description || 'Payment failed'))
