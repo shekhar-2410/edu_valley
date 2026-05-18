@@ -15,6 +15,7 @@ const AdminLogin = lazy(() => import('./pages/AdminLogin'))
 const Admissions = lazy(() => import('./pages/Admissions'))
 const Contact = lazy(() => import('./pages/Contact'))
 const Events = lazy(() => import('./pages/Events'))
+const EventDetail = lazy(() => import('./pages/EventDetail'))
 const ERPLogin = lazy(() => import('./pages/ERPLogin'))
 const ERPPortal = lazy(() => import('./pages/ERPPortal'))
 const Faculty = lazy(() => import('./pages/Faculty'))
@@ -79,6 +80,7 @@ function AppContent() {
             <Route path="/admissions" element={<Admissions />} />
             <Route path="/faculty" element={<Faculty />} />
             <Route path="/events" element={<Events />} />
+            <Route path="/events/:id" element={<EventDetail />} />
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/contact" element={<Contact />} />
