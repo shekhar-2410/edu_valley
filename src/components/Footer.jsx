@@ -40,9 +40,8 @@ const Footer = () => {
                         <h3 className="text-xl font-display font-bold text-white">{t('footer.contact_info')}</h3>
                         <ul className="space-y-4">
                             <li><Link to="/contact" className="text-brand-navy-300 hover:text-brand-gold-400 hover:pl-2 transition-all flex items-center gap-2"><ArrowRight size={14} /> {t('navbar.contact')}</Link></li>
-                            <li className="text-brand-navy-300 flex items-center gap-2"><ArrowRight size={14} /> Student Portal</li>
-                            <li className="text-brand-navy-300 flex items-center gap-2"><ArrowRight size={14} /> Parent Portal</li>
-                            <li className="text-brand-navy-300 flex items-center gap-2"><ArrowRight size={14} /> Careers</li>
+                            <li><Link to="/erp-login" className="text-brand-navy-300 hover:text-brand-gold-400 hover:pl-2 transition-all flex items-center gap-2"><ArrowRight size={14} /> Student Portal</Link></li>
+                            <li><Link to="/erp-login" className="text-brand-navy-300 hover:text-brand-gold-400 hover:pl-2 transition-all flex items-center gap-2"><ArrowRight size={14} /> Parent Portal</Link></li>
                         </ul>
                     </div>
 
