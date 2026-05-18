@@ -3389,7 +3389,7 @@ const TeacherMarks = ({ dashboard, createMark, studentMap, refreshDashboard }) =
         setSaving(true)
         try {
             // TODO: replace this fan-out with a backend batch endpoint when available.
-            await Promise.all(enteredRows.map((student) => {
+            const results = await Promise.allSettled(enteredRows.map((student) => {
                 const marks = Number(marksByStudent[student.profile.id])
                 return createMark({
                     student_id: Number(student.profile.id),
@@ -3402,10 +3402,27 @@ const TeacherMarks = ({ dashboard, createMark, studentMap, refreshDashboard }) =
                     exam_date: form.exam_date,
                 }, { notify: false, refresh: false })
             }))
-            setSaveSummary(`Marks saved for ${enteredRows.length} student${enteredRows.length === 1 ? '' : 's'}`)
-            toast.success(`Marks saved for ${enteredRows.length} student${enteredRows.length === 1 ? '' : 's'}`)
-            setMarksByStudent({})
-            refreshDashboard()
+            const failures = results
+                .map((result, index) => ({ result, student: enteredRows[index] }))
+                .filter(({ result }) => result.status === 'rejected')
+            const successCount = results.length - failures.length
+            const failureRollList = failures
+                .map(({ student }) => student.profile.roll_no || student.profile.full_name || `#${student.profile.id}`)
+                .join(', ')
+            if (failures.length === 0) {
+                setSaveSummary(`Marks saved for ${successCount} student${successCount === 1 ? '' : 's'}`)
+                toast.success(`Marks saved for ${successCount} student${successCount === 1 ? '' : 's'}`)
+                setMarksByStudent({})
+                refreshDashboard()
+            } else if (successCount === 0) {
+                const firstError = failures[0].result.reason
+                setSaveSummary(`Failed to save marks. ${failures.length} error${failures.length === 1 ? '' : 's'}.`)
+                toast.error(firstError?.message || `Failed to save marks. ${failures.length} error${failures.length === 1 ? '' : 's'}.`)
+            } else {
+                setSaveSummary(`Saved ${successCount} of ${results.length}. Failed: ${failureRollList}.`)
+                toast.error(`Saved ${successCount} of ${results.length}. ${failures.length} failed (${failureRollList}) — please retry.`)
+                refreshDashboard()
+            }
         } catch (err) {
             toast.error(err.message || 'Could not save marks')
         } finally {
