@@ -1,11 +1,12 @@
 import { Mail, MapPin, Phone, Send, Clock, Facebook, Instagram, Youtube, CheckCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
 
 const Contact = () => {
     const { t } = useTranslation()
+    const navigate = useNavigate()
     const [searchParams] = useSearchParams()
     const [formData, setFormData] = useState({
         name: '',
@@ -63,7 +64,7 @@ const Contact = () => {
             if (response.ok) {
                 setSubmitSuccess(true)
                 setFormData({ name: '', email: '', phone: '', subject: '', message: '' })
-                setTimeout(() => setSubmitSuccess(false), 5000)
+                setTimeout(() => navigate('/thank-you'), 800)
             } else {
                 setSubmitError(true)
             }

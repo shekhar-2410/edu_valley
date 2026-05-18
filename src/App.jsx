@@ -21,6 +21,7 @@ const Faculty = lazy(() => import('./pages/Faculty'))
 const Gallery = lazy(() => import('./pages/Gallery'))
 const Home = lazy(() => import('./pages/Home'))
 const Resources = lazy(() => import('./pages/Resources'))
+const ThankYou = lazy(() => import('./pages/ThankYou'))
 const NotFound = lazy(() => import('./pages/NotFound'))
 
 // Protected Route Component
@@ -81,6 +82,7 @@ function AppContent() {
             <Route path="/gallery" element={<Gallery />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/contact" element={<Contact />} />
+            <Route path="/thank-you" element={<ThankYou />} />
             <Route path="/admin-login" element={<AdminLogin />} />
             <Route path="/erp-login" element={<ERPLogin />} />
             <Route
