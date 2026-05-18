@@ -348,7 +348,10 @@ const teacherNav = [
 
 const guardianNav = [
     { id: 'dashboard', label: 'Dashboard', icon: <Home size={18} /> },
-    { id: 'messages', label: 'Messages', icon: <Bell size={18} /> },
+    { id: 'fees', label: 'Fees', icon: <CreditCard size={18} /> },
+    { id: 'attendance', label: 'Attendance', icon: <ClipboardList size={18} /> },
+    { id: 'marks', label: 'Marks', icon: <BookOpen size={18} /> },
+    { id: 'messages', label: 'Messages', icon: <MessageSquare size={18} /> },
 ]
 
 
@@ -748,6 +751,9 @@ const ERPPortal = () => {
                     ) : user?.role === 'guardian' ? (
                         <>
                             {activeTab === 'dashboard' && <GuardianDashboardView dashboard={dashboard} setActiveTab={setActiveTab} />}
+                            {activeTab === 'fees' && <GuardianFeesView apiRequest={apiRequest} children={dashboard.children || []} />}
+                            {activeTab === 'attendance' && <GuardianAttendanceView apiRequest={apiRequest} children={dashboard.children || []} />}
+                            {activeTab === 'marks' && <GuardianMarksView apiRequest={apiRequest} children={dashboard.children || []} />}
                             {activeTab === 'messages' && <MessagesView apiRequest={apiRequest} user={user} students={dashboard.children || []} />}
                         </>
                     ) : (
@@ -883,6 +889,328 @@ const GuardianDashboardView = ({ dashboard, setActiveTab }) => {
                         </div>
                     )}
                 </div>
+            )}
+        </div>
+    )
+}
+
+const GuardianChildSelector = ({ children, selectedId, onSelect }) => {
+    if (!children || children.length === 0) return null
+    if (children.length === 1) {
+        const child = children[0]
+        return (
+            <div className="rounded-2xl border border-slate-200 bg-white px-5 py-4 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Viewing</p>
+                <p className="mt-1 font-display text-xl font-bold text-slate-950">{child.user.full_name}</p>
+                <p className="text-xs font-medium text-slate-500">Class {child.profile.class_name}-{child.profile.section} · {child.profile.admission_no}</p>
+            </div>
+        )
+    }
+    return (
+        <div className="flex flex-wrap gap-2">
+            {children.map((child) => {
+                const isActive = selectedId === child.profile.id
+                return (
+                    <button
+                        key={child.profile.id}
+                        type="button"
+                        onClick={() => onSelect(child.profile.id)}
+                        className={`rounded-full border px-4 py-2 text-sm font-semibold transition-all ${
+                            isActive
+                                ? 'border-brand-navy-700 bg-brand-navy-700 text-white'
+                                : 'border-slate-200 bg-white text-slate-700 hover:border-brand-navy-200 hover:bg-brand-navy-50'
+                        }`}
+                    >
+                        {child.user.full_name}
+                        <span className={`ml-2 text-xs font-medium ${isActive ? 'text-white/70' : 'text-slate-500'}`}>
+                            {child.profile.class_name}-{child.profile.section}
+                        </span>
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
+const useGuardianChildDetails = (apiRequest, selectedId) => {
+    const [details, setDetails] = useState(null)
+    const [loading, setLoading] = useState(false)
+
+    useEffect(() => {
+        if (!selectedId) {
+            setDetails(null)
+            return
+        }
+        let cancelled = false
+        setLoading(true)
+        apiRequest(API_ENDPOINTS.erpGuardianChildDetails(selectedId))
+            .then((data) => {
+                if (!cancelled) setDetails(data)
+            })
+            .catch(() => {
+                if (!cancelled) setDetails(null)
+            })
+            .finally(() => {
+                if (!cancelled) setLoading(false)
+            })
+        return () => { cancelled = true }
+    }, [apiRequest, selectedId])
+
+    return { details, loading }
+}
+
+const GuardianFeesView = ({ apiRequest, children }) => {
+    const [selectedId, setSelectedId] = useState(children[0]?.profile?.id || null)
+    const { details, loading } = useGuardianChildDetails(apiRequest, selectedId)
+    const invoices = details?.invoices || []
+    const payments = details?.payments || []
+    const totalAmount = invoices.reduce((sum, inv) => sum + (inv.amount_paise || 0), 0)
+    const totalPaid = invoices.reduce((sum, inv) => sum + (inv.paid_paise || 0), 0)
+    const totalDue = invoices.reduce((sum, inv) => sum + getBalance(inv), 0)
+    const paidPercent = totalAmount > 0 ? Math.round((totalPaid / totalAmount) * 100) : 0
+    const nextDue = [...invoices]
+        .filter((inv) => getBalance(inv) > 0 && inv.due_date)
+        .sort((a, b) => new Date(a.due_date) - new Date(b.due_date))[0]
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Guardian · Fees</p>
+                <h1 className="mt-1 font-display text-3xl font-black text-slate-950">Fees</h1>
+            </div>
+            <GuardianChildSelector children={children} selectedId={selectedId} onSelect={setSelectedId} />
+            {children.length === 0 ? (
+                <EmptyState title="No students linked to this guardian account yet" icon={<Users size={32} />} />
+            ) : loading && !details ? (
+                <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-slate-500">
+                    <Loader2 size={20} className="mr-2 animate-spin" /> Loading fees…
+                </div>
+            ) : (
+                <>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <div className="grid gap-5 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+                            <div>
+                                <p className="text-xs font-medium text-slate-500">Annual fee progress</p>
+                                <p className="mt-1 font-display text-3xl font-bold text-slate-950">{money(totalPaid)}</p>
+                                <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                                    <div className="h-full rounded-full bg-brand-navy-600" style={{ width: `${Math.min(100, paidPercent)}%` }} />
+                                </div>
+                                <p className="mt-2 text-xs font-medium text-slate-500">{paidPercent}% paid of {money(totalAmount)}</p>
+                            </div>
+                            <StatTile label="Paid" value={money(totalPaid)} icon={<Check size={19} />} tone="emerald" />
+                            <StatTile label="Due" value={money(totalDue)} icon={<CreditCard size={19} />} tone={totalDue > 0 ? 'crimson' : 'slate'} />
+                            <StatTile label="Next Due" value={nextDue ? formatDate(nextDue.due_date) : '—'} icon={<Calendar size={19} />} tone={nextDue ? 'gold' : 'slate'} sub={nextDue?.title} />
+                        </div>
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="border-b border-slate-200 px-6 py-4">
+                            <h2 className="text-lg font-black text-slate-950">Invoices</h2>
+                        </div>
+                        {invoices.length === 0 ? (
+                            <div className="p-6"><EmptyState title="No invoices assigned yet" icon={<CreditCard size={32} />} /></div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {invoices.map((inv) => {
+                                    const balance = getBalance(inv)
+                                    const invoicePaidPercent = inv.amount_paise > 0 ? Math.round(((inv.paid_paise || 0) / inv.amount_paise) * 100) : 0
+                                    return (
+                                        <div key={inv.id} className="p-5">
+                                            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                                                <div className="min-w-0">
+                                                    <p className="font-bold text-slate-950">{inv.title}</p>
+                                                    <p className="text-xs font-medium text-slate-500">{inv.invoice_no} · {inv.term || 'General'} · Due {formatDate(inv.due_date)}</p>
+                                                    <div className="mt-3 h-2 max-w-sm overflow-hidden rounded-full bg-slate-100">
+                                                        <div className="h-full rounded-full bg-emerald-500" style={{ width: `${Math.min(100, invoicePaidPercent)}%` }} />
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-wrap items-center gap-3 sm:justify-end">
+                                                    <div className="text-left sm:text-right">
+                                                        <p className="font-display text-xl font-bold text-slate-950">{money(inv.amount_paise)}</p>
+                                                        {balance > 0 && <p className="text-xs font-semibold text-brand-crimson-700">Due {money(balance)}</p>}
+                                                    </div>
+                                                    <StatusBadge status={inv.status} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+                        <div className="border-b border-slate-200 px-6 py-4">
+                            <h2 className="text-lg font-black text-slate-950">Payment History</h2>
+                        </div>
+                        {payments.length === 0 ? (
+                            <div className="p-6"><EmptyState title="No payments yet" icon={<Receipt size={32} />} /></div>
+                        ) : (
+                            <div className="divide-y divide-slate-100">
+                                {payments.map((payment) => (
+                                    <div key={payment.id} className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
+                                        <div>
+                                            <p className="font-bold text-slate-950">{payment.receipt_no || 'Receipt pending'}</p>
+                                            <p className="text-xs font-medium text-slate-500">{formatDate(payment.paid_at)} · {payment.method}</p>
+                                        </div>
+                                        <p className="font-display text-xl font-bold text-slate-950">{money(payment.amount_paise)}</p>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </>
+            )}
+        </div>
+    )
+}
+
+const GuardianAttendanceView = ({ apiRequest, children }) => {
+    const [selectedId, setSelectedId] = useState(children[0]?.profile?.id || null)
+    const { details, loading } = useGuardianChildDetails(apiRequest, selectedId)
+    const attendance = details?.attendance || []
+    const present = attendance.filter((r) => r.status === 'present').length
+    const absent = attendance.filter((r) => r.status === 'absent').length
+    const leave = attendance.filter((r) => r.status === 'leave').length
+    const percent = attendance.length > 0 ? Math.round((present / attendance.length) * 100) : 0
+
+    const byMonth = {}
+    attendance.forEach((record) => {
+        const key = record.date.slice(0, 7)
+        if (!byMonth[key]) byMonth[key] = { present: 0, absent: 0, leave: 0, total: 0 }
+        byMonth[key][record.status] = (byMonth[key][record.status] || 0) + 1
+        byMonth[key].total++
+    })
+    const months = Object.entries(byMonth).sort((a, b) => b[0].localeCompare(a[0]))
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Guardian · Attendance</p>
+                <h1 className="mt-1 font-display text-3xl font-black text-slate-950">Attendance</h1>
+            </div>
+            <GuardianChildSelector children={children} selectedId={selectedId} onSelect={setSelectedId} />
+            {children.length === 0 ? (
+                <EmptyState title="No students linked to this guardian account yet" icon={<Users size={32} />} />
+            ) : loading && !details ? (
+                <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-slate-500">
+                    <Loader2 size={20} className="mr-2 animate-spin" /> Loading attendance…
+                </div>
+            ) : (
+                <>
+                    <div className="grid gap-3 sm:grid-cols-3">
+                        <StatTile label="Attendance %" value={`${percent}%`} icon={<ClipboardList size={19} />} tone="navy" />
+                        <StatTile label="Present" value={present} icon={<Check size={19} />} tone="emerald" />
+                        <StatTile label="Absent" value={absent} icon={<X size={19} />} tone="crimson" />
+                    </div>
+
+                    {months.length > 0 && (
+                        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <h2 className="mb-4 text-lg font-black text-slate-950">Monthly Summary</h2>
+                            <div className="space-y-3">
+                                {months.map(([month, data]) => (
+                                    <div key={month} className="flex items-center gap-4 rounded-xl bg-slate-50 px-4 py-3">
+                                        <div className="w-20 text-sm font-black text-slate-700">{month}</div>
+                                        <div className="flex-1">
+                                            <div className="mb-1 flex justify-between text-xs font-bold text-slate-500">
+                                                <span>{data.present}P · {data.absent}A · {data.leave}L</span>
+                                                <span>{data.total > 0 ? Math.round(data.present / data.total * 100) : 0}%</span>
+                                            </div>
+                                            <div className="h-2 rounded-full bg-slate-200">
+                                                <div className="h-full rounded-full bg-brand-navy-600 transition-all" style={{ width: `${data.total > 0 ? (data.present / data.total * 100) : 0}%` }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                        <h2 className="mb-4 text-lg font-black text-slate-950">Recent Records</h2>
+                        {attendance.length === 0 ? (
+                            <EmptyState title="No attendance records yet" icon={<ClipboardList size={32} />} />
+                        ) : (
+                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                                {attendance.map((record) => (
+                                    <div key={record.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
+                                        <div>
+                                            <p className="font-black text-slate-900">{formatDate(record.date)}</p>
+                                            {record.note && <p className="text-xs text-slate-500">{record.note}</p>}
+                                        </div>
+                                        <StatusBadge status={record.status} />
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        <p className="mt-3 text-xs text-slate-400">Showing the most recent 60 records.</p>
+                    </div>
+                </>
+            )}
+        </div>
+    )
+}
+
+const GuardianMarksView = ({ apiRequest, children }) => {
+    const [selectedId, setSelectedId] = useState(children[0]?.profile?.id || null)
+    const { details, loading } = useGuardianChildDetails(apiRequest, selectedId)
+    const marks = details?.marks || []
+    const byExam = {}
+    marks.forEach((m) => {
+        if (!byExam[m.exam_name]) byExam[m.exam_name] = []
+        byExam[m.exam_name].push(m)
+    })
+
+    return (
+        <div className="space-y-6">
+            <div>
+                <p className="text-xs font-semibold uppercase tracking-widest text-brand-navy-500">Guardian · Marks</p>
+                <h1 className="mt-1 font-display text-3xl font-black text-slate-950">Marks</h1>
+            </div>
+            <GuardianChildSelector children={children} selectedId={selectedId} onSelect={setSelectedId} />
+            {children.length === 0 ? (
+                <EmptyState title="No students linked to this guardian account yet" icon={<Users size={32} />} />
+            ) : loading && !details ? (
+                <div className="flex items-center justify-center rounded-2xl border border-slate-200 bg-white py-16 text-slate-500">
+                    <Loader2 size={20} className="mr-2 animate-spin" /> Loading marks…
+                </div>
+            ) : Object.entries(byExam).length === 0 ? (
+                <EmptyState title="No marks published yet" icon={<BookOpen size={32} />} />
+            ) : (
+                Object.entries(byExam).map(([examName, examMarks]) => {
+                    const totalObt = examMarks.reduce((s, m) => s + m.marks_obtained, 0)
+                    const totalMax = examMarks.reduce((s, m) => s + m.max_marks, 0)
+                    const pct = totalMax > 0 ? Math.round(totalObt / totalMax * 100) : 0
+                    return (
+                        <div key={examName} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+                            <div className="mb-4 flex items-center justify-between">
+                                <h2 className="text-lg font-bold text-slate-950">{examName}</h2>
+                                <span className={`font-display text-2xl font-bold ${pct >= 75 ? 'text-emerald-700' : pct >= 50 ? 'text-amber-700' : 'text-rose-700'}`}>
+                                    {pct}%
+                                </span>
+                            </div>
+                            <div className="space-y-3">
+                                {examMarks.map((mark) => {
+                                    const markPct = mark.max_marks > 0 ? Math.round((mark.marks_obtained / mark.max_marks) * 100) : 0
+                                    return (
+                                        <div key={mark.id} className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
+                                            <div className="flex flex-wrap items-start justify-between gap-4">
+                                                <div>
+                                                    <p className="font-semibold text-slate-950">{mark.subject}</p>
+                                                    <p className="font-mono text-xs font-medium text-slate-500">{formatDate(mark.exam_date)}</p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="font-display text-2xl font-bold text-slate-950">{mark.marks_obtained}/{mark.max_marks}</p>
+                                                    <p className={`text-xs font-semibold ${gradeColor(mark.grade)}`}>{mark.grade || `${markPct}%`}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </div>
+                    )
+                })
             )}
         </div>
     )

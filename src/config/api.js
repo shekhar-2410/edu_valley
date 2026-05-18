@@ -16,6 +16,7 @@ export const API_ENDPOINTS = {
     erpStudentDashboard: `${API_BASE_URL}/erp/student/dashboard`,
     erpTeacherDashboard: `${API_BASE_URL}/erp/teacher/dashboard`,
     erpGuardianDashboard: `${API_BASE_URL}/erp/guardian/dashboard`,
+    erpGuardianChildDetails: (id) => `${API_BASE_URL}/erp/guardian/child/${id}/details`,
     erpNotifications: `${API_BASE_URL}/erp/notifications`,
     erpMessages: `${API_BASE_URL}/erp/messages`,
     erpSubstitutions: `${API_BASE_URL}/erp/substitutions/dashboard`,
