@@ -550,6 +550,13 @@ const ERPPortal = () => {
                 ...(options.headers || {}),
             },
         })
+        if (response.status === 401) {
+            localStorage.removeItem('erpToken')
+            localStorage.removeItem('erpUser')
+            toast.error('Session expired. Please log in again.')
+            window.location.href = '/erp-login'
+            throw new Error('Session expired')
+        }
         const data = await response.json().catch(() => ({}))
         if (!response.ok) throw new Error(data.detail || 'ERP request failed')
         return data
