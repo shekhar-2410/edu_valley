@@ -2170,12 +2170,45 @@ def get_substitution_dashboard(
             "periods_today": count,
         })
     workload = sorted(workload, key=lambda row: (row["periods_today"], row["teacher_name"]))
+
+    # Bulk-fetch related entities to avoid N+1 queries
+    class_section_ids = {slot.class_section_id for slot in slots if slot.class_section_id}
+    subject_ids = {slot.subject_id for slot in slots if slot.subject_id}
+    slot_teacher_ids = {slot.teacher_id for slot in slots if slot.teacher_id}
+
+    class_sections_map = {
+        cs.id: cs
+        for cs in db.query(models.ClassSection).filter(
+            models.ClassSection.id.in_(class_section_ids)
+        ).all()
+    } if class_section_ids else {}
+    subjects_map = {
+        s.id: s
+        for s in db.query(models.Subject).filter(
+            models.Subject.id.in_(subject_ids)
+        ).all()
+    } if subject_ids else {}
+    slot_teachers_map = {
+        t.id: t
+        for t in db.query(models.TeacherProfile).filter(
+            models.TeacherProfile.id.in_(slot_teacher_ids)
+        ).all()
+    } if slot_teacher_ids else {}
+    slot_teacher_user_ids = {t.user_id for t in slot_teachers_map.values()}
+    # teacher_users already loaded above; some slot teachers may be inactive/deleted (not in teacher_users), so fetch any missing.
+    missing_user_ids = slot_teacher_user_ids - set(teacher_users.keys())
+    if missing_user_ids:
+        for erp_user in db.query(models.ErpUser).filter(
+            models.ErpUser.id.in_(missing_user_ids)
+        ).all():
+            teacher_users[erp_user.id] = erp_user
+
     cover_slots = []
     for slot in slots:
-        class_section = db.query(models.ClassSection).filter(models.ClassSection.id == slot.class_section_id).first()
-        subject = db.query(models.Subject).filter(models.Subject.id == slot.subject_id).first() if slot.subject_id else None
-        assigned_teacher = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == slot.teacher_id).first() if slot.teacher_id else None
-        assigned_user = db.query(models.ErpUser).filter(models.ErpUser.id == assigned_teacher.user_id).first() if assigned_teacher else None
+        class_section = class_sections_map.get(slot.class_section_id)
+        subject = subjects_map.get(slot.subject_id) if slot.subject_id else None
+        assigned_teacher = slot_teachers_map.get(slot.teacher_id) if slot.teacher_id else None
+        assigned_user = teacher_users.get(assigned_teacher.user_id) if assigned_teacher else None
         busy_teacher_ids = {
             busy.teacher_id
             for busy in slots
