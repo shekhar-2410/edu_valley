@@ -42,7 +42,15 @@ def ensure_lightweight_migrations():
                 connection.execute(text("ALTER TABLE contacts ADD COLUMN status VARCHAR(20) DEFAULT 'new'"))
             if "read" not in columns:
                 connection.execute(text("ALTER TABLE contacts ADD COLUMN read BOOLEAN DEFAULT false"))
-    for table_name in ("events", "faculty", "gallery_images", "announcements"):
+    for table_name in (
+        "events",
+        "faculty",
+        "gallery_images",
+        "announcements",
+        "student_profiles",
+        "teacher_profiles",
+        "fee_invoices",
+    ):
         if table_name not in table_names:
             continue
         columns = {column["name"] for column in inspector.get_columns(table_name)}
