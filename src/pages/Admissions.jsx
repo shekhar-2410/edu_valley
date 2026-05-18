@@ -229,12 +229,18 @@ const Admissions = () => {
                             </ul>
 
                             <div className="flex flex-wrap gap-4">
-                                <button disabled title="Coming soon" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold opacity-50 cursor-not-allowed">
-                                    <Download size={20} /> {t('admissions.prospectus')}
-                                </button>
-                                <button disabled title="Coming soon" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold opacity-50 cursor-not-allowed">
-                                    <FileText size={20} /> {t('admissions.uniform')}
-                                </button>
+                                <Link
+                                    to="/contact?subject=Request%20for%20Brochure"
+                                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold hover:bg-brand-navy-700 transition-colors"
+                                >
+                                    <Download size={20} /> Request Brochure
+                                </Link>
+                                <Link
+                                    to="/contact?subject=Request%20for%20Uniform%20List"
+                                    className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-brand-navy-800 border border-brand-navy-700 text-white font-semibold hover:bg-brand-navy-700 transition-colors"
+                                >
+                                    <FileText size={20} /> Request Uniform List
+                                </Link>
                             </div>
                         </div>
 

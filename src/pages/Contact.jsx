@@ -1,10 +1,12 @@
 import { Mail, MapPin, Phone, Send, Clock, Facebook, Instagram, Youtube, CheckCircle } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
 
 const Contact = () => {
     const { t } = useTranslation()
+    const [searchParams] = useSearchParams()
     const [formData, setFormData] = useState({
         name: '',
         email: '',
@@ -12,6 +14,13 @@ const Contact = () => {
         subject: '',
         message: ''
     })
+
+    useEffect(() => {
+        const prefillSubject = searchParams.get('subject')
+        if (prefillSubject) {
+            setFormData((prev) => ({ ...prev, subject: prefillSubject }))
+        }
+    }, [searchParams])
 
     const handleChange = (e) => {
         setFormData({
