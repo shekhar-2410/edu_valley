@@ -1,0 +1,11 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin-login
+Disallow: /erp
+Disallow: /erp-login
+Disallow: /thank-you
+Disallow: /api/
+
+Sitemap: https://www.narendraeduvalley.com/sitemap.xml
