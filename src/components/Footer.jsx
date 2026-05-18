@@ -1,6 +1,7 @@
 import { Facebook, Instagram, Youtube, ArrowRight } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import { CONTACT } from '../config/contact'
 
 const Footer = () => {
     const { t } = useTranslation()
@@ -51,8 +52,8 @@ const Footer = () => {
                         <Link to="/admissions" className="bg-brand-crimson-600 text-white text-center py-3 px-6 rounded-xl font-bold block hover:bg-brand-crimson-700 transition-colors">
                             Enroll Now →
                         </Link>
-                        <a href="tel:+917050421421" className="text-brand-navy-300 hover:text-white transition-colors font-medium text-center">
-                            📞 +91 70504 21421
+                        <a href={`tel:${CONTACT.phoneTel}`} className="text-brand-navy-300 hover:text-white transition-colors font-medium text-center">
+                            📞 {CONTACT.phoneFormatted}
                         </a>
                     </div>
                 </div>

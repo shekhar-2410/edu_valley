@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
+import { CONTACT } from '../config/contact'
 
 const Contact = () => {
     const { t } = useTranslation()
@@ -131,7 +132,7 @@ const Contact = () => {
                                     <div>
                                         <h4 className="text-xl font-bold text-brand-navy-900 mb-3">{t('contact.call_us')}</h4>
                                         <div className="space-y-1">
-                                            <p className="text-xl font-bold text-brand-navy-700">+91 70504 21421</p>
+                                            <p className="text-xl font-bold text-brand-navy-700">{CONTACT.phoneFormatted}</p>
                                             <p className="text-brand-navy-400 font-medium">Mon - Sat, 8AM - 4PM</p>
                                         </div>
                                     </div>
@@ -258,7 +259,7 @@ const Contact = () => {
                                     )}
                                     {submitError && (
                                         <div className="flex items-center gap-3 p-4 rounded-2xl bg-brand-crimson-50 border border-brand-crimson-200 text-brand-crimson-700 font-bold">
-                                            Failed to send message. Please try again or call us at +91 70504 21421.
+                                            Failed to send message. Please try again or call us at {CONTACT.phoneFormatted}.
                                         </div>
                                     )}
                                     <button

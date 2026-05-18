@@ -7,6 +7,7 @@ import ScrollToTop from './components/ui/ScrollToTop'
 import ScrollToTopReset from './components/ui/ScrollToTopReset'
 import { ToastContainer } from 'react-toastify'
 import 'react-toastify/dist/ReactToastify.css'
+import { CONTACT } from './config/contact'
 
 const About = lazy(() => import('./pages/About'))
 const Academics = lazy(() => import('./pages/Academics'))
@@ -111,7 +112,7 @@ function AppContent() {
       {!isAppRoute && <ScrollToTop />}
       {!isAppRoute && (
         <a
-          href="https://wa.me/917050421421?text=Hello%2C%20I%20want%20to%20enquire%20about%20admissions"
+          href={CONTACT.whatsappUrl}
           target="_blank"
           rel="noopener noreferrer"
           className="fixed bottom-24 right-6 z-50 flex h-14 w-14 items-center justify-center rounded-full shadow-2xl hover:scale-110 transition-transform"

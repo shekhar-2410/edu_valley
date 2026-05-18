@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { CheckCircle, ArrowLeft } from 'lucide-react'
+import { CONTACT } from '../config/contact'
 
 const ThankYou = () => {
     return (
@@ -12,7 +13,7 @@ const ThankYou = () => {
                     Thank You
                 </h1>
                 <p className="text-lg text-brand-navy-600 mb-8 leading-relaxed">
-                    We've received your message and will get back to you within 24 hours. For urgent enquiries, please call <a href="tel:+917050421421" className="text-brand-navy-700 font-semibold underline">+91 70504 21421</a>.
+                    We've received your message and will get back to you within 24 hours. For urgent enquiries, please call <a href={`tel:${CONTACT.phoneTel}`} className="text-brand-navy-700 font-semibold underline">{CONTACT.phoneFormatted}</a>.
                 </p>
                 <Link
                     to="/"
