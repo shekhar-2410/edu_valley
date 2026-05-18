@@ -1,11 +1,15 @@
 import { Award, Eye, Target, Users, CheckCircle, Heart, Star, Shield } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const About = () => {
     const { t } = useTranslation()
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.about} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-12 pb-12 lg:pt-20 lg:pb-20 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute inset-0 bg-cover bg-center opacity-10" style={{ backgroundImage: "url('/images/about-hero.jpg')" }}></div>
@@ -172,7 +176,8 @@ const About = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

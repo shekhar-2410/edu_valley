@@ -1,10 +1,21 @@
 import { Link } from 'react-router-dom'
+import { Helmet } from 'react-helmet-async'
 import { CheckCircle, ArrowLeft } from 'lucide-react'
 import { CONTACT } from '../config/contact'
+import SEO from '../components/SEO'
 
 const ThankYou = () => {
     return (
-        <div className="min-h-[60vh] flex items-center justify-center px-4 py-20 bg-brand-cream">
+        <>
+            <SEO
+                title="Thank You | Narendra Edu Valley"
+                description="Thank you for contacting Narendra Edu Valley. We will get back to you shortly."
+                path="/thank-you"
+            />
+            <Helmet>
+                <meta name="robots" content="noindex" />
+            </Helmet>
+            <div className="min-h-[60vh] flex items-center justify-center px-4 py-20 bg-brand-cream">
             <div className="max-w-xl mx-auto text-center">
                 <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-green-100 text-green-600 mb-8">
                     <CheckCircle size={48} strokeWidth={2.5} />
@@ -23,7 +34,8 @@ const ThankYou = () => {
                     Back to Home
                 </Link>
             </div>
-        </div>
+            </div>
+        </>
     )
 }
 

@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Link } from 'react-router-dom'
 import { API_ENDPOINTS } from '../config/api'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Events = () => {
     const { t, i18n } = useTranslation()
@@ -80,6 +82,8 @@ const Events = () => {
 
     if (loading) {
         return (
+            <>
+            <SEO {...PAGE_META.events} />
             <div className="bg-white">
                 <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950">
                     <div className="container mx-auto px-4 text-center">
@@ -108,11 +112,14 @@ const Events = () => {
                     </div>
                 </section>
             </div>
+            </>
         )
     }
 
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.events} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute inset-0 bg-[url('/images/events-hero.jpg')] bg-cover bg-center opacity-20"></div>
@@ -327,7 +334,8 @@ const Events = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

@@ -1,6 +1,8 @@
 import { Calendar, ShieldCheck, ChevronRight, IndianRupee, Award, Users, CheckCircle, Download, FileText } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Admissions = () => {
     const { t } = useTranslation()
@@ -45,7 +47,9 @@ const Admissions = () => {
     ]
 
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.admissions} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-24 pb-20 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute inset-0 bg-gradient-to-br from-brand-navy-800/40 via-brand-navy-950 to-brand-navy-900/40 z-0"></div>
@@ -279,7 +283,8 @@ const Admissions = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

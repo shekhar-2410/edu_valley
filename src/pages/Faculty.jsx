@@ -2,6 +2,8 @@ import { Mail, Phone, User, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Faculty = () => {
     const { t } = useTranslation()
@@ -42,6 +44,8 @@ const Faculty = () => {
 
     if (loading) {
         return (
+            <>
+            <SEO {...PAGE_META.faculty} />
             <div className="bg-white">
                 <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950">
                     <div className="container mx-auto px-4">
@@ -79,11 +83,14 @@ const Faculty = () => {
                     </div>
                 </section>
             </div>
+            </>
         )
     }
 
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.faculty} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-16 pb-14 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute top-0 right-0 w-full lg:w-1/2 h-full bg-brand-crimson-600/5 skew-x-[-15deg] translate-x-32 hidden lg:block"></div>
@@ -204,7 +211,8 @@ const Faculty = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

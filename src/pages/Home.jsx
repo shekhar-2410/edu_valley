@@ -15,6 +15,8 @@ import { API_ENDPOINTS } from '../config/api'
 
 import Button from '../components/ui/Button'
 import Card from '../components/ui/Card'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Home = () => {
     const [announcements, setAnnouncements] = useState([])
@@ -54,7 +56,9 @@ const Home = () => {
     const academicYear = `${currentYear}-${(currentYear + 1).toString().slice(-2)}`;
 
     return (
-        <div className="home-elearning">
+        <>
+            <SEO {...PAGE_META.home} />
+            <div className="home-elearning">
             {/* Hero Section */}
             <section className="relative pt-12 pb-16 lg:pt-20 lg:pb-32 bg-brand-cream overflow-hidden">
                 <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-[0.06] -z-10"></div>
@@ -271,7 +275,8 @@ const Home = () => {
                 </div>
             </section>
 
-        </div>
+            </div>
+        </>
     )
 }
 

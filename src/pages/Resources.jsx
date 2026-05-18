@@ -1,4 +1,6 @@
 import { BookOpen, ExternalLink, Globe, Laptop, Video } from 'lucide-react'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Resources = () => {
     const resources = [
@@ -66,7 +68,9 @@ const Resources = () => {
     ]
 
     return (
-        <div className="bg-white min-h-screen">
+        <>
+            <SEO {...PAGE_META.resources} />
+            <div className="bg-white min-h-screen">
             {/* Header Section */}
             <section className="relative pt-24 pb-20 lg:pt-40 lg:pb-32 overflow-hidden bg-brand-navy-900 text-white">
                 <div className="absolute inset-0 bg-[url('https://images.unsplash.com/photo-1521737604893-d14cc237f11d?auto=format&fit=crop&q=80&w=2000')] bg-cover bg-center opacity-10"></div>
@@ -128,7 +132,8 @@ const Resources = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

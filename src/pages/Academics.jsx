@@ -1,6 +1,8 @@
 import { BookOpen, Calculator, FlaskConical, Globe, Music, Palette } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const Academics = () => {
     const { t } = useTranslation()
@@ -65,7 +67,9 @@ const Academics = () => {
     ]
 
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.academics} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-16 pb-16 lg:pt-40 lg:pb-40 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute inset-0 bg-[url('/images/academics-hero.jpg')] bg-fixed bg-cover bg-center opacity-10"></div>
@@ -282,7 +286,8 @@ const Academics = () => {
                     </div>
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

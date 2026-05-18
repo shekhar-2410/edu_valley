@@ -1,6 +1,8 @@
 import { Image as ImageIcon, ZoomIn, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { API_ENDPOINTS } from '../config/api'
+import SEO from '../components/SEO'
+import { PAGE_META } from '../config/seo'
 
 const ImageRotator = ({ slotIndex, images }) => {
     const slotImages = []
@@ -77,6 +79,8 @@ const Gallery = () => {
 
     if (loading) {
         return (
+            <>
+            <SEO {...PAGE_META.gallery} />
             <div className="bg-white">
                 <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 bg-brand-navy-950">
                     <div className="container mx-auto px-4">
@@ -114,11 +118,14 @@ const Gallery = () => {
                     </div>
                 </section>
             </div>
+            </>
         )
     }
 
     return (
-        <div className="bg-white">
+        <>
+            <SEO {...PAGE_META.gallery} />
+            <div className="bg-white">
             {/* Header Section */}
             <section className="relative pt-16 pb-14 lg:pt-28 lg:pb-20 overflow-hidden bg-brand-navy-950 text-white">
                 <div className="absolute top-0 left-0 w-full lg:w-1/2 h-full bg-brand-navy-900 skew-x-[15deg] -translate-x-32 hidden lg:block"></div>
@@ -251,7 +258,8 @@ const Gallery = () => {
                     )}
                 </div>
             </section>
-        </div>
+            </div>
+        </>
     )
 }
 

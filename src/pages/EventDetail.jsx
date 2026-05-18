@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Calendar, MapPin } from 'lucide-react'
 import { API_ENDPOINTS } from '../config/api'
+import SEO from '../components/SEO'
 
 const EventDetail = () => {
     const { id } = useParams()
@@ -59,7 +60,17 @@ const EventDetail = () => {
     }
 
     return (
-        <div className="min-h-screen bg-brand-cream py-12 md:py-20">
+        <>
+            {event && (
+                <SEO
+                    title={`${event.title} | Narendra Edu Valley`}
+                    description={event.description?.slice(0, 160) || 'School event at Narendra Edu Valley.'}
+                    path={`/events/${event.id}`}
+                    image={event.image_url || undefined}
+                    type="article"
+                />
+            )}
+            <div className="min-h-screen bg-brand-cream py-12 md:py-20">
             <div className="container mx-auto px-4 max-w-4xl">
                 <Link
                     to="/events"
@@ -92,7 +103,8 @@ const EventDetail = () => {
                     {event.description}
                 </div>
             </div>
-        </div>
+            </div>
+        </>
     )
 }
 
