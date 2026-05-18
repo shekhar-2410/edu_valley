@@ -1,4 +1,4 @@
-import { Mail, Phone, Users } from 'lucide-react'
+import { Mail, Phone, User, Users } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { API_ENDPOINTS } from '../config/api'
@@ -124,12 +124,18 @@ const Faculty = () => {
                         {faculty.filter(f => selectedDept === 'All' || f.department === selectedDept).map((member) => (
                             <div key={member.id} className="bg-white rounded-[2.5rem] overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-300 border border-brand-navy-100/50 group">
                                 <div className="h-80 overflow-hidden relative">
-                                    <img
-                                        src={member.image_url || '/images/placeholder-faculty.png'}
-                                        alt={member.name}
-                                        loading="lazy"
-                                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                                    />
+                                    {member.image_url ? (
+                                        <img
+                                            src={member.image_url}
+                                            alt={member.name}
+                                            loading="lazy"
+                                            className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                                        />
+                                    ) : (
+                                        <div className="flex items-center justify-center h-full w-full bg-brand-navy-100 text-brand-navy-400">
+                                            <User size={48} />
+                                        </div>
+                                    )}
                                     <div className="absolute inset-0 bg-gradient-to-t from-brand-navy-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
                                 </div>
                                 <div className="p-8">
