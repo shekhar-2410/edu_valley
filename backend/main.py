@@ -1615,6 +1615,47 @@ def get_guardian_dashboard(
         },
     }
 
+@app.get("/erp/guardian/child/{student_id}/details")
+@app.get("/api/erp/guardian/child/{student_id}/details")
+def get_guardian_child_details(
+    student_id: int,
+    user: models.ErpUser = Depends(get_current_erp_user),
+    db: Session = Depends(get_db),
+):
+    if user.role != "guardian":
+        raise HTTPException(status_code=403, detail="Guardian access only")
+    link = db.query(models.GuardianStudent).filter(
+        models.GuardianStudent.guardian_user_id == user.id,
+        models.GuardianStudent.student_id == student_id,
+    ).first()
+    if not link:
+        raise HTTPException(status_code=403, detail="Not authorized to view this student")
+    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    student_user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
+    invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id == student.id
+    ).order_by(models.FeeInvoice.due_date.desc()).all()
+    payments = db.query(models.FeePayment).filter(
+        models.FeePayment.student_id == student.id
+    ).order_by(models.FeePayment.created_at.desc()).all()
+    marks = db.query(models.MarkEntry).filter(
+        models.MarkEntry.student_id == student.id
+    ).order_by(models.MarkEntry.exam_date.desc()).all()
+    attendance = db.query(models.AttendanceRecord).filter(
+        models.AttendanceRecord.student_id == student.id
+    ).order_by(models.AttendanceRecord.date.desc()).limit(60).all()
+    return {
+        "user": student_user,
+        "profile": student,
+        "invoices": invoices,
+        "payments": payments,
+        "marks": marks,
+        "attendance": attendance,
+    }
+
+
 @app.get("/erp/teacher/dashboard", response_model=schemas.TeacherDashboard)
 @app.get("/api/erp/teacher/dashboard", response_model=schemas.TeacherDashboard)
 def get_teacher_dashboard(
