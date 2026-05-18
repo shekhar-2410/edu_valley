@@ -294,7 +294,10 @@ async def get_current_erp_user(token: str = Depends(oauth2_scheme), db: Session 
 def get_student_profile_for_user(user: models.ErpUser, db: Session) -> models.StudentProfile:
     if user.role != "student":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student access required")
-    profile = db.query(models.StudentProfile).filter(models.StudentProfile.user_id == user.id).first()
+    profile = db.query(models.StudentProfile).filter(
+        models.StudentProfile.user_id == user.id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Student profile not found")
     return profile
@@ -302,14 +305,20 @@ def get_student_profile_for_user(user: models.ErpUser, db: Session) -> models.St
 def get_teacher_profile_for_user(user: models.ErpUser, db: Session) -> models.TeacherProfile:
     if user.role != "teacher":
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher access required")
-    profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id == user.id).first()
+    profile = db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.user_id == user.id,
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Teacher profile not found")
     return profile
 
 def build_student_summary(student: models.StudentProfile, db: Session) -> schemas.StudentSummary:
     user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
-    invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == student.id).all()
+    invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id == student.id,
+        models.FeeInvoice.deleted_at.is_(None),
+    ).all()
     marks = db.query(models.MarkEntry).filter(models.MarkEntry.student_id == student.id).all()
     attendance = db.query(models.AttendanceRecord).filter(models.AttendanceRecord.student_id == student.id).all()
     fee_due = sum(invoice_balance(invoice) for invoice in invoices)
@@ -329,7 +338,10 @@ def build_student_summaries_batch(students: list, db: Session) -> list:
 
     users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()}
 
-    all_invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id.in_(student_ids)).all()
+    all_invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id.in_(student_ids),
+        models.FeeInvoice.deleted_at.is_(None),
+    ).all()
     invoices_map: dict = {}
     for inv in all_invoices:
         invoices_map.setdefault(inv.student_id, []).append(inv)
@@ -1093,7 +1105,10 @@ def admin_list_erp_teachers(admin=Depends(get_current_admin), db: Session = Depe
     teachers = db.query(models.ErpUser).filter(models.ErpUser.role == "teacher").order_by(models.ErpUser.full_name).all()
     teacher_user_ids = [t.id for t in teachers]
 
-    profiles = {p.user_id: p for p in db.query(models.TeacherProfile).filter(models.TeacherProfile.user_id.in_(teacher_user_ids)).all()}
+    profiles = {p.user_id: p for p in db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.user_id.in_(teacher_user_ids),
+        models.TeacherProfile.deleted_at.is_(None),
+    ).all()}
     profile_ids = [p.id for p in profiles.values()]
 
     assignments = db.query(models.TeacherSubjectAssignment).filter(models.TeacherSubjectAssignment.teacher_id.in_(profile_ids)).all() if profile_ids else []
@@ -1166,7 +1181,10 @@ def admin_create_erp_teacher(payload: schemas.AdminCreateTeacher, admin=Depends(
 @app.post("/admin/erp/teacher-assignments")
 @app.post("/api/admin/erp/teacher-assignments")
 def admin_create_teacher_assignment(payload: schemas.AdminAssignTeacher, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    profile = db.query(models.TeacherProfile).filter(models.TeacherProfile.id == payload.teacher_profile_id).first()
+    profile = db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.id == payload.teacher_profile_id,
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Teacher profile not found")
     cs = db.query(models.ClassSection).filter(models.ClassSection.id == payload.class_section_id).first()
@@ -1439,7 +1457,9 @@ def admin_list_trashed_invoices(admin=Depends(get_current_admin), db: Session = 
 @app.get("/admin/erp/fees/students")
 @app.get("/api/admin/erp/fees/students")
 def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    students = db.query(models.StudentProfile).order_by(
+    students = db.query(models.StudentProfile).filter(
+        models.StudentProfile.deleted_at.is_(None),
+    ).order_by(
         models.StudentProfile.class_name, models.StudentProfile.section, models.StudentProfile.roll_no
     ).all()
     student_ids = [s.id for s in students]
@@ -1447,7 +1467,10 @@ def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(g
 
     users = {u.id: u for u in db.query(models.ErpUser).filter(models.ErpUser.id.in_(user_ids)).all()}
 
-    all_invoices = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id.in_(student_ids)).order_by(models.FeeInvoice.due_date).all()
+    all_invoices = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.student_id.in_(student_ids),
+        models.FeeInvoice.deleted_at.is_(None),
+    ).order_by(models.FeeInvoice.due_date).all()
     invoices_map: dict = {}
     for inv in all_invoices:
         invoices_map.setdefault(inv.student_id, []).append(inv)
@@ -1498,7 +1521,10 @@ def admin_fee_students(admin=Depends(get_current_admin), db: Session = Depends(g
 @app.post("/admin/erp/fee-invoices")
 @app.post("/api/admin/erp/fee-invoices")
 def admin_create_invoice(payload: schemas.AdminCreateInvoice, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == payload.student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     count = db.query(models.FeeInvoice).filter(models.FeeInvoice.student_id == payload.student_id).count()
@@ -1532,7 +1558,10 @@ def admin_create_invoice(payload: schemas.AdminCreateInvoice, admin=Depends(get_
 @app.post("/admin/erp/fee-payments/manual")
 @app.post("/api/admin/erp/fee-payments/manual")
 def admin_manual_payment(payload: schemas.AdminManualPayment, admin=Depends(get_current_admin), db: Session = Depends(get_db)):
-    invoice = db.query(models.FeeInvoice).filter(models.FeeInvoice.id == payload.invoice_id).first()
+    invoice = db.query(models.FeeInvoice).filter(
+        models.FeeInvoice.id == payload.invoice_id,
+        models.FeeInvoice.deleted_at.is_(None),
+    ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
     balance = invoice_balance(invoice)
@@ -1552,7 +1581,10 @@ def admin_manual_payment(payload: schemas.AdminManualPayment, admin=Depends(get_
     payment.receipt_no = generate_receipt_no(payment.id)
     invoice.paid_paise = (invoice.paid_paise or 0) + amount
     sync_invoice_status(invoice)
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == invoice.student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == invoice.student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if student:
         create_notification(db, "erp", student.user_id, "Payment recorded", f"{payment.receipt_no} for {amount / 100:.0f} INR was recorded.", "fee", "/erp")
         for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
@@ -1682,7 +1714,8 @@ def get_student_dashboard(
 ):
     profile = get_student_profile_for_user(user, db)
     invoices = db.query(models.FeeInvoice).filter(
-        models.FeeInvoice.student_id == profile.id
+        models.FeeInvoice.student_id == profile.id,
+        models.FeeInvoice.deleted_at.is_(None),
     ).order_by(models.FeeInvoice.due_date.asc()).all()
     payments = db.query(models.FeePayment).filter(
         models.FeePayment.student_id == profile.id,
@@ -1697,7 +1730,9 @@ def get_student_dashboard(
     attendance = db.query(models.AttendanceRecord).filter(
         models.AttendanceRecord.student_id == profile.id
     ).order_by(models.AttendanceRecord.date.desc()).all()
-    class_students_query = db.query(models.StudentProfile)
+    class_students_query = db.query(models.StudentProfile).filter(
+        models.StudentProfile.deleted_at.is_(None),
+    )
     if profile.class_section_id:
         class_students_query = class_students_query.filter(models.StudentProfile.class_section_id == profile.class_section_id)
     else:
@@ -1765,7 +1800,10 @@ def get_guardian_dashboard(
     children = []
     total_due = 0
     for student_id in student_ids:
-        student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+        student = db.query(models.StudentProfile).filter(
+            models.StudentProfile.id == student_id,
+            models.StudentProfile.deleted_at.is_(None),
+        ).first()
         if not student:
             continue
         summary = build_student_summary(student, db)
@@ -1813,12 +1851,16 @@ def get_guardian_child_details(
     ).first()
     if not link:
         raise HTTPException(status_code=403, detail="Not authorized to view this student")
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     student_user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
     invoices = db.query(models.FeeInvoice).filter(
-        models.FeeInvoice.student_id == student.id
+        models.FeeInvoice.student_id == student.id,
+        models.FeeInvoice.deleted_at.is_(None),
     ).order_by(models.FeeInvoice.due_date.desc()).all()
     payments = db.query(models.FeePayment).filter(
         models.FeePayment.student_id == student.id
@@ -1867,11 +1909,13 @@ def get_teacher_dashboard(
             p.id
             for p in db.query(models.StudentProfile).filter(
                 models.StudentProfile.class_section_id.in_(assigned_cs_ids),
+                models.StudentProfile.deleted_at.is_(None),
             ).all()
         }
         all_ids = enrolled_ids | profile_ids
         students = db.query(models.StudentProfile).filter(
-            models.StudentProfile.id.in_(list(all_ids))
+            models.StudentProfile.id.in_(list(all_ids)),
+            models.StudentProfile.deleted_at.is_(None),
         ).order_by(
             models.StudentProfile.class_name,
             models.StudentProfile.section,
@@ -1879,7 +1923,9 @@ def get_teacher_dashboard(
         ).all()
     else:
         # No assignments yet — show all students as fallback
-        students = db.query(models.StudentProfile).order_by(
+        students = db.query(models.StudentProfile).filter(
+            models.StudentProfile.deleted_at.is_(None),
+        ).order_by(
             models.StudentProfile.class_name,
             models.StudentProfile.section,
             models.StudentProfile.roll_no,
@@ -2002,10 +2048,16 @@ def find_class_teacher_for_student(student: models.StudentProfile, db: Session) 
             models.TeacherSubjectAssignment.is_class_teacher == True,
         ).first()
         if assignment:
-            return db.query(models.TeacherProfile).filter(models.TeacherProfile.id == assignment.teacher_id).first()
+            return db.query(models.TeacherProfile).filter(
+                models.TeacherProfile.id == assignment.teacher_id,
+                models.TeacherProfile.deleted_at.is_(None),
+            ).first()
     return db.query(models.TeacherProfile).filter(
-        models.TeacherProfile.class_teacher_of == f"Class {student.class_name} {student.section}"
-    ).first() or db.query(models.TeacherProfile).first()
+        models.TeacherProfile.class_teacher_of == f"Class {student.class_name} {student.section}",
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first() or db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first()
 
 @app.get("/erp/messages", response_model=List[schemas.MessageThreadOut])
 @app.get("/api/erp/messages", response_model=List[schemas.MessageThreadOut])
@@ -2036,7 +2088,10 @@ def create_message_thread(
     user: models.ErpUser = Depends(get_current_erp_user),
     db: Session = Depends(get_db),
 ):
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == payload.student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     guardian_user_id = None
@@ -2090,7 +2145,10 @@ def get_substitution_dashboard(
     target_day = day_of_week if day_of_week is not None else datetime.now().weekday()
     if target_day > 5:
         target_day = 0
-    teachers = db.query(models.TeacherProfile).filter(models.TeacherProfile.is_active == True).all()
+    teachers = db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.is_active == True,
+        models.TeacherProfile.deleted_at.is_(None),
+    ).all()
     teacher_users = {
         erp_user.id: erp_user
         for erp_user in db.query(models.ErpUser).filter(
@@ -2188,8 +2246,11 @@ def create_leave_request(
     if days_count <= 0:
         raise HTTPException(status_code=400, detail="Leave end date must be on or after start date")
     teacher = db.query(models.TeacherProfile).filter(
-        models.TeacherProfile.class_teacher_of == f"Class {profile.class_name} {profile.section}"
-    ).first() or db.query(models.TeacherProfile).first()
+        models.TeacherProfile.class_teacher_of == f"Class {profile.class_name} {profile.section}",
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first() or db.query(models.TeacherProfile).filter(
+        models.TeacherProfile.deleted_at.is_(None),
+    ).first()
     obj = models.LeaveRequest(
         student_id=profile.id,
         teacher_id=teacher.id if teacher else None,
@@ -2219,7 +2280,10 @@ def update_leave_request(
     obj.status = payload.status
     obj.reviewer_note = payload.reviewer_note
     obj.teacher_id = teacher.id
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == obj.student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == obj.student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if student:
         create_notification(db, "erp", student.user_id, f"Leave {payload.status}", payload.reviewer_note or f"Your leave request was {payload.status}.", "leave", "/erp")
         for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
@@ -2251,7 +2315,10 @@ def create_mark_entry(
     teacher = get_teacher_profile_for_user(user, db)
     if payload.marks_obtained > payload.max_marks:
         raise HTTPException(status_code=400, detail="Marks obtained cannot exceed maximum marks")
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == payload.student_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == payload.student_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
     percent = (payload.marks_obtained / payload.max_marks) * 100
@@ -2285,6 +2352,7 @@ def create_razorpay_order(
     invoice = db.query(models.FeeInvoice).filter(
         models.FeeInvoice.id == payload.invoice_id,
         models.FeeInvoice.student_id == student.id,
+        models.FeeInvoice.deleted_at.is_(None),
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -2402,6 +2470,7 @@ def verify_razorpay_payment(
     invoice = db.query(models.FeeInvoice).filter(
         models.FeeInvoice.id == payment.invoice_id,
         models.FeeInvoice.student_id == student.id,
+        models.FeeInvoice.deleted_at.is_(None),
     ).first()
     if not invoice:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -2604,7 +2673,10 @@ def update_student_status(
     db: Session = Depends(get_db),
 ):
     teacher = get_teacher_profile_for_user(user, db)
-    profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_profile_id).first()
+    profile = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == student_profile_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Student not found")
     student_user = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first()
@@ -2625,7 +2697,9 @@ def get_all_students(
 ):
     if user.role not in ("teacher", "admin"):
         raise HTTPException(status_code=403, detail="Not authorized")
-    students = db.query(models.StudentProfile).order_by(
+    students = db.query(models.StudentProfile).filter(
+        models.StudentProfile.deleted_at.is_(None),
+    ).order_by(
         models.StudentProfile.class_name,
         models.StudentProfile.section,
         models.StudentProfile.roll_no,
@@ -2692,13 +2766,15 @@ def get_class_section_students(
         p.id
         for p in db.query(models.StudentProfile).filter(
             models.StudentProfile.class_section_id == class_section_id,
+            models.StudentProfile.deleted_at.is_(None),
         ).all()
     }
     all_ids = enrolled_ids | profile_ids
     if not all_ids:
         return []
     profiles = db.query(models.StudentProfile).filter(
-        models.StudentProfile.id.in_(list(all_ids))
+        models.StudentProfile.id.in_(list(all_ids)),
+        models.StudentProfile.deleted_at.is_(None),
     ).order_by(models.StudentProfile.roll_no, models.StudentProfile.class_name).all()
     return [build_student_summary(p, db) for p in profiles]
 
@@ -2761,8 +2837,11 @@ def get_class_attendance(
     result = []
     for enrollment in enrollments:
         student_profile = db.query(models.StudentProfile).filter(
-            models.StudentProfile.id == enrollment.student_id
+            models.StudentProfile.id == enrollment.student_id,
+            models.StudentProfile.deleted_at.is_(None),
         ).first()
+        if not student_profile:
+            continue
         student_user = db.query(models.ErpUser).filter(
             models.ErpUser.id == student_profile.user_id
         ).first() if student_profile else None
@@ -2887,7 +2966,10 @@ def get_student_analytics(
         profile = get_student_profile_for_user(user, db)
         if profile.id != student_profile_id:
             raise HTTPException(status_code=403, detail="Access denied")
-    student = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_profile_id).first()
+    student = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id == student_profile_id,
+        models.StudentProfile.deleted_at.is_(None),
+    ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
@@ -2904,7 +2986,8 @@ def get_student_analytics(
     ).all()
 
     invoices = db.query(models.FeeInvoice).filter(
-        models.FeeInvoice.student_id == student_profile_id
+        models.FeeInvoice.student_id == student_profile_id,
+        models.FeeInvoice.deleted_at.is_(None),
     ).all()
 
     from collections import defaultdict
@@ -3002,6 +3085,7 @@ def get_class_analytics(
             profiles = db.query(models.StudentProfile).filter(
                 models.StudentProfile.class_name == cs.class_name,
                 models.StudentProfile.section == cs.section,
+                models.StudentProfile.deleted_at.is_(None),
             ).all()
             student_ids = [p.id for p in profiles]
 
@@ -3017,7 +3101,12 @@ def get_class_analytics(
     # Per-student stats for "needs attention" and performers
     student_stats = []
     for student_id in student_ids:
-        profile = db.query(models.StudentProfile).filter(models.StudentProfile.id == student_id).first()
+        profile = db.query(models.StudentProfile).filter(
+            models.StudentProfile.id == student_id,
+            models.StudentProfile.deleted_at.is_(None),
+        ).first()
+        if not profile:
+            continue
         user_obj = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first() if profile else None
         s_marks = [m for m in all_marks if m.student_id == student_id]
         s_att = [r for r in all_attendance if r.student_id == student_id]
