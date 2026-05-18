@@ -1936,7 +1936,10 @@ const FeesPanel = ({ dashboard, handlePay, openReceipt, sharePaymentReceipt, bus
 
             {payConfirm && (
                 <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4">
-                    <div className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-2xl">
+                    <div
+                        className="w-full max-w-md rounded-t-3xl bg-white p-6 shadow-2xl sm:rounded-2xl"
+                        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+                    >
                         <h3 className="text-lg font-black text-slate-950">Confirm Payment</h3>
                         <p className="mt-2 text-sm text-slate-500">{payConfirm.title}</p>
                         <div className="mt-5 rounded-2xl bg-brand-navy-50 p-4">
@@ -2624,7 +2627,10 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
     if (defaultPwd) {
         return (
             <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4">
-                <div className="w-full max-w-md rounded-t-3xl bg-white p-8 shadow-2xl sm:rounded-2xl">
+                <div
+                    className="w-full max-w-md rounded-t-3xl bg-white p-8 shadow-2xl sm:rounded-2xl"
+                    style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+                >
                     <div className="mb-6 flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-700">
                         <Check size={28} />
                     </div>
@@ -2671,7 +2677,10 @@ const AddStudentModal = ({ classSections: initialSections, onClose, onSuccess, a
 
     return (
         <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4">
-            <div className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl">
+            <div
+                className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
+                style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+            >
                 <div className="sticky top-0 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
                     <h2 className="text-lg font-black text-slate-950">Add New Student</h2>
                     <button type="button" onClick={onClose} className="rounded-xl p-2 text-slate-400 hover:bg-slate-100"><X size={18} /></button>
@@ -3073,7 +3082,10 @@ const TeacherStudents = ({ dashboard, studentMap, apiRequest }) => {
             {/* Inline confirm modal (replaces window.confirm) */}
             {confirmDisable && (
                 <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/60 backdrop-blur-sm sm:items-center sm:p-4">
-                    <div className="w-full max-w-sm rounded-t-3xl bg-white p-7 shadow-2xl sm:rounded-2xl">
+                    <div
+                        className="w-full max-w-sm rounded-t-3xl bg-white p-7 shadow-2xl sm:rounded-2xl"
+                        style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+                    >
                         <h3 className="text-base font-black text-slate-950">
                             {(confirmDisable.profile.status || 'active') === 'active' ? 'Disable student?' : 'Re-enable student?'}
                         </h3>
@@ -3988,7 +4000,10 @@ const ReceiptModal = ({ receiptData, onClose }) => {
     const balance = Math.max(0, (r.invoice.amount_paise || 0) - (r.invoice.paid_paise || 0))
     return (
         <div className="fixed inset-0 z-[2000] flex items-end justify-center bg-slate-950/70 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-            <div className="max-h-[95dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl">
+            <div
+                className="max-h-[95dvh] w-full max-w-2xl overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-2xl"
+                style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+            >
                 {/* Modal header bar */}
                 <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-5 py-3.5">
                     <div className="flex items-center gap-3">
