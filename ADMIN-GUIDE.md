@@ -51,21 +51,15 @@ The School Website Admin Panel provides a secure, intuitive interface for managi
 
 **URL**: `http://localhost/admin-login` (or `http://localhost:80/admin-login`)
 
-**System Administrator**: `admin@nev.edu`  
-**Password**: `admin123`
-
-**School Director**: `director@nev.edu`  
-**Password**: `admin123`
-
-> ⚠️ **IMPORTANT**: Change these credentials for production use!
+Demo accounts are no longer documented with shared passwords. If you need local demo users, enable `/setup-db` only in a non-production environment with `ALLOW_DEMO_SETUP=true` and explicit `DEMO_*_PASSWORD` values.
 
 ## How to Use
 
 ### 1. Login Process
 
 1. Navigate to `/admin-login`
-2. Enter email: `admin@nev.edu`
-3. Enter password: `admin123`
+2. Enter the admin email provisioned for your environment
+3. Enter its password
 4. Click "Authorize Access"
 5. You'll be redirected to the secure admin dashboard
 

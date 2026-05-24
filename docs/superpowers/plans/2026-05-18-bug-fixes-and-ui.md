@@ -59,7 +59,7 @@ In another terminal, run:
 ```bash
 curl -s -X POST http://localhost:8000/events \
   -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $(curl -s -X POST http://localhost:8000/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@nev.edu","password":"admin123"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')" \
+  -H "Authorization: Bearer $(curl -s -X POST http://localhost:8000/auth/login -H 'Content-Type: application/json' -d '{"email":"admin@nev.edu","password":"<admin-password>"}' | python3 -c 'import sys,json; print(json.load(sys.stdin)["access_token"])')" \
   -d '{"title":"Test Event","description":"A test","date":"2026-06-01"}' | python3 -m json.tool
 ```
 

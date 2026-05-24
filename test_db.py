@@ -1,25 +1,26 @@
-import sys
 import os
+import sys
 
-# Set dummy env vars for local testing
-os.environ["DATABASE_URL"] = "postgresql://edu_db_buh8_user:h752OQcRkQo138S86j29rRMY5gXw116D@dpg-cv0r8g56l47c73eq65lg-a.oregon-postgres.render.com/edu_db_buh8"
-os.environ["SECRET_KEY"] = "test"
 
-# run imports
-sys.path.append(os.path.join(os.getcwd(), 'backend'))
+os.environ.setdefault("DATABASE_URL", "sqlite:////private/tmp/edu_valley_smoke.db")
+os.environ.setdefault("SECRET_KEY", "local-smoke-secret")
+
+sys.path.append(os.path.join(os.getcwd(), "backend"))
 
 try:
-    from backend.database import SessionLocal
-    from backend.models import AdminUser
+    from backend.database import SessionLocal, engine
+    from backend.models import AdminUser, Base
+
+    Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
-    user = db.query(AdminUser).filter(AdminUser.email == "admin@nev.edu").first()
-    print("User found:", user.email if user else "None")
-    
-    from passlib.context import CryptContext
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-    if user:
-        print("Password match:", pwd_context.verify("admin123", user.hashed_password))
-except Exception as e:
+    try:
+        user = db.query(AdminUser).filter(AdminUser.email == os.getenv("SMOKE_ADMIN_EMAIL", "admin@nev.edu")).first()
+        print("Database connection OK")
+        print("Admin user found:", bool(user))
+    finally:
+        db.close()
+except Exception:
     import traceback
     traceback.print_exc()
-
+    raise

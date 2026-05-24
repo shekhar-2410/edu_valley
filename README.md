@@ -1,6 +1,6 @@
-# Excellence Academy - School Website
+# Narendra Edu Valley - School Website and ERP
 
-A comprehensive, full-stack school management website built with React (frontend) and FastAPI (backend), featuring a responsive design for both desktop and mobile devices.
+A full-stack school website and lightweight ERP for Narendra Edu Valley, built with React/Vite on the frontend and FastAPI/SQLAlchemy on the backend.
 
 ## Features
 
@@ -15,15 +15,18 @@ A comprehensive, full-stack school management website built with React (frontend
 - **Contact Page**: Contact form with school information
 - **Admin Dashboard**: Content management system for all sections
 
-### Backend (FastAPI + SQLite)
+### Backend (FastAPI + SQLAlchemy)
 - RESTful API endpoints
-- SQLite database for data persistence
+- Database configured through `DATABASE_URL` for PostgreSQL or SQLite
 - CRUD operations for:
   - Events
   - Faculty members
   - Gallery images
   - Contact messages
   - Announcements
+- ERP workflows for students, teachers, and guardians:
+  - Fees, receipts, and Razorpay order verification
+  - Attendance, marks, leaves, messages, timetable, and analytics
 
 ### Key Features
 - ✅ Fully responsive design (mobile, tablet, desktop)
@@ -53,34 +56,11 @@ A comprehensive, full-stack school management website built with React (frontend
 
 ## Installation & Setup
 
-### 🐳 **Docker Deployment (Recommended)**
-
-The easiest way to run the application is using Docker:
-
-#### Quick Start with Docker
-```powershell
-# Build and start all services
-docker-compose up -d
-
-# Access the application
-# Frontend: http://localhost
-# Backend: http://localhost:8000
-```
-
-#### Seed Sample Data
-```powershell
-docker-compose exec backend python seed_data.py
-```
-
-For detailed Docker instructions, see [DOCKER.md](DOCKER.md)
-
-### 💻 **Manual Setup (Alternative)**
-
 ### Prerequisites
-- Python 3.8 or higher
-- Node.js 16 or higher
-- npm or yarn
-- **(Optional)** Docker & Docker Compose
+- Python 3.10 or higher
+- Node.js 20.x
+- npm
+- A `DATABASE_URL` value, for example `sqlite:///./school.db` for local development
 
 ### Backend Setup
 
@@ -100,7 +80,13 @@ python -m venv venv
 pip install -r requirements.txt
 ```
 
-4. Start the FastAPI server:
+4. Configure environment variables:
+```powershell
+$env:DATABASE_URL="sqlite:///./school.db"
+$env:SECRET_KEY="replace-with-a-local-secret"
+```
+
+5. Start the FastAPI server:
 ```powershell
 python main.py
 ```
@@ -109,116 +95,60 @@ The backend API will be running at `http://localhost:8000`
 
 ### Frontend Setup
 
-1. Navigate to the frontend directory:
-```powershell
-cd frontend
-```
-
-2. Install dependencies:
+1. Install dependencies from the project root:
 ```powershell
 npm install
 ```
 
-3. Start the development server:
+2. Point the frontend at the backend API:
+```powershell
+$env:VITE_API_URL="http://localhost:8000"
+```
+
+3. Start the development server from the project root:
 ```powershell
 npm run dev
 ```
 
 The frontend will be running at `http://localhost:3000`
 
-## Deployment Options
+## Deployment Notes
 
-### 🐳 Docker (Recommended)
-
-#### Production Mode
-```powershell
-docker-compose up -d              # Start services
-docker-compose logs -f            # View logs
-docker-compose down               # Stop services
-```
-
-#### Development Mode (with hot-reload)
-```powershell
-docker-compose -f docker-compose.dev.yml up
-```
-
-#### Helper Scripts
-- `docker-build.bat` - Build Docker images
-- `docker-start.bat` - Start production containers
-- `docker-start-dev.bat` - Start development containers
-- `docker-stop.bat` - Stop all containers
-- `docker-seed.bat` - Seed database in Docker
-
-See [DOCKER.md](DOCKER.md) for complete Docker documentation.
+- Set `VITE_API_URL` in the frontend deployment when the backend is hosted on a different origin.
+- Set `SECRET_KEY` in production; the backend refuses to start in production without it.
+- Set `BACKEND_PUBLIC_URL` or `RENDER_EXTERNAL_URL` so uploaded image URLs resolve correctly from the public website.
+- Keep demo setup disabled in production. `/setup-db` requires `ALLOW_DEMO_SETUP=true` and explicit `DEMO_*_PASSWORD` values.
 
 ## Project Structure
 
 ```
-school-website/
+edu_valley/
 ├── backend/
-│   ├── main.py              # FastAPI application entry point
-│   ├── models.py            # Database models
+│   ├── main.py              # FastAPI app and routes
+│   ├── models.py            # SQLAlchemy models
 │   ├── schemas.py           # Pydantic schemas
-│   ├── database.py          # Database configuration
-│   ├── seed_data.py         # Sample data seeder
-│   ├── requirements.txt     # Python dependencies
-│   ├── Dockerfile           # Docker image definition
-│   ├── .dockerignore        # Docker ignore file
-│   └── school.db           # SQLite database (auto-generated)
-│
-├── frontend/
-│   ├── src/
-│   │   ├── components/      # Reusable components
-│   │   │   ├── Navbar.jsx
-│   │   │   ├── Navbar.css
-│   │   │   ├── Footer.jsx
-│   │   │   └── Footer.css
-│   │   ├── pages/          # Page components
-│   │   │   ├── Home.jsx
-│   │   │   ├── Home.css
-│   │   │   ├── About.jsx
-│   │   │   ├── About.css
-│   │   │   ├── Academics.jsx
-│   │   │   ├── Academics.css
-│   │   │   ├── Admissions.jsx
-│   │   │   ├── Admissions.css
-│   │   │   ├── Faculty.jsx
-│   │   │   ├── Faculty.css
-│   │   │   ├── Events.jsx
-│   │   │   ├── Events.css
-│   │   │   ├── Gallery.jsx
-│   │   │   ├── Gallery.css
-│   │   │   ├── Contact.jsx
-│   │   │   ├── Contact.css
-│   │   │   ├── Admin.jsx
-│   │   │   └── Admin.css
-│   │   ├── App.jsx          # Main app component with routing
-│   │   ├── main.jsx         # React entry point
-│   │   └── index.css        # Global styles
-│   ├── index.html
-│   ├── package.json
-│   ├── vite.config.js
-│   ├── nginx.conf           # Nginx configuration for production
-│   ├── Dockerfile           # Production Docker image
-│   ├── Dockerfile.dev       # Development Docker image
-│   └── .dockerignore        # Docker ignore file
-│
-├── docker-compose.yml       # Production Docker Compose
-├── docker-compose.dev.yml   # Development Docker Compose
-├── README.md                # Main documentation
-├── DOCKER.md                # Docker deployment guide
-├── QUICKSTART.md            # Quick start guide
-├── .gitignore               # Git ignore file
-│
-└── Helper Scripts:
-    ├── setup.bat            # Install dependencies
-    ├── start.bat            # Start both servers
-    ├── seed.bat             # Seed database
-    ├── docker-build.bat     # Build Docker images
-    ├── docker-start.bat     # Start Docker containers
-    ├── docker-start-dev.bat # Start Docker (dev mode)
-    ├── docker-stop.bat      # Stop Docker containers
-    └── docker-seed.bat      # Seed database in Docker
+│   ├── database.py          # DATABASE_URL engine/session setup
+│   └── requirements.txt     # Python dependencies
+├── public/
+│   ├── images/              # Public website images and logo assets
+│   ├── robots.txt
+│   └── sitemap.xml
+├── scripts/
+│   └── prerender.mjs        # Optional static prerender script
+├── src/
+│   ├── components/          # Shared React components
+│   ├── config/              # API, contact, SEO config
+│   ├── locales/             # English/Hindi translations
+│   ├── pages/               # Public, admin, and ERP routes
+│   ├── App.jsx
+│   ├── main.jsx
+│   └── index.css
+├── index.html
+├── package.json
+├── tailwind.config.js
+├── vite.config.js
+├── vercel.json
+└── README.md
 ```
 
 ## API Endpoints
@@ -259,9 +189,7 @@ school-website/
 
 ### For Administrators
 1. Access the admin dashboard at `/admin`
-2. **Login Credentials**:
-   - Email: `admin@nev.edu`
-   - Password: `admin123`
+2. Use the administrator account provisioned for your environment. Demo setup requires `ALLOW_DEMO_SETUP=true` and explicit `DEMO_*_PASSWORD` values.
 3. Add, edit, or delete:
    - Events
    - Announcements

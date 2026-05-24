@@ -7,6 +7,18 @@ import { printReceiptPDF, printInvoicePDF, shareReceiptWhatsApp } from '../utils
 import SideSheet from '../components/ui/SideSheet'
 import DataTable from '../components/ui/DataTable'
 
+const apiBaseUrl = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '')
+
+const resolveApiAssetUrl = (url) => {
+    if (!url || /^https?:\/\//i.test(url)) return url
+    return `${apiBaseUrl}${url.startsWith('/') ? url : `/${url}`}`
+}
+
+const getAdminUploadHeaders = () => {
+    const token = localStorage.getItem('adminToken')
+    return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 // Centralised admin fetch wrapper. Attaches the admin bearer token and
 // detects expired/forged sessions (401) so the user is redirected to
 // /admin-login instead of staring at a half-broken dashboard. New admin
@@ -815,11 +827,11 @@ const ImagePicker = ({ onSelect, onClose }) => {
         setUploading(true)
         try {
             const body = await buildImageUploadFormData(file)
-            const response = await fetch(API_ENDPOINTS.upload, { method: 'POST', body })
+            const response = await fetch(API_ENDPOINTS.upload, { method: 'POST', headers: getAdminUploadHeaders(), body })
             if (!response.ok) throw new Error('Upload failed')
             const data = await response.json()
             toast.success('Image uploaded')
-            onSelect(data.url)
+            onSelect(resolveApiAssetUrl(data.url))
         } catch (error) {
             toast.error(error.message || 'Image upload failed')
         } finally {
@@ -1088,12 +1100,13 @@ const EventsManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
                 method: 'POST',
+                headers: getAdminUploadHeaders(),
                 body: uploadFormData
             })
 
             if (response.ok) {
                 const data = await response.json()
-                setFormData(prev => ({ ...prev, image_url: data.url }))
+                setFormData(prev => ({ ...prev, image_url: resolveApiAssetUrl(data.url) }))
                 toast.success('Event image uploaded')
             } else {
                 toast.error('Upload failed')
@@ -1770,12 +1783,13 @@ const FacultyManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
                 method: 'POST',
+                headers: getAdminUploadHeaders(),
                 body: uploadFormData
             })
 
             if (response.ok) {
                 const data = await response.json()
-                setFormData(prev => ({ ...prev, image_url: data.url }))
+                setFormData(prev => ({ ...prev, image_url: resolveApiAssetUrl(data.url) }))
                 toast.success('Profile photo uploaded')
             } else {
                 toast.error('Upload failed')
@@ -2156,13 +2170,13 @@ const GalleryManager = ({ showForm, setShowForm, getAuthHeaders }) => {
         try {
             const response = await fetch(API_ENDPOINTS.upload, {
                 method: 'POST',
-                // No headers needed, browser sets multipart/form-data automatically
+                headers: getAdminUploadHeaders(),
                 body: uploadFormData
             })
 
             if (response.ok) {
                 const data = await response.json()
-                setFormData(prev => ({ ...prev, image_url: data.url }))
+                setFormData(prev => ({ ...prev, image_url: resolveApiAssetUrl(data.url) }))
                 toast.success('Image uploaded successfully')
             } else {
                 toast.error('Image upload failed')

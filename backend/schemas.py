@@ -527,7 +527,7 @@ class StudentStatusUpdate(BaseModel):
 
 class BulkAttendanceRecord(BaseModel):
     student_id: int
-    status: str  # present, absent, leave
+    status: str = Field(..., pattern="^(present|absent|leave)$")
     note: Optional[str] = None
 
 

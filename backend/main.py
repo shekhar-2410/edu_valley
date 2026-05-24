@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Depends, File, Header, HTTPException, Request, UploadFile, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from typing import List, Optional
+from typing import List, Optional, Set
 from datetime import date, datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -99,8 +99,9 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
 
-# Base URL for image URL rewriting
-RENDER_BASE_URL = os.getenv("RENDER_EXTERNAL_URL", "https://edu-valley.onrender.com")
+# Base URL for image URL rewriting. Set BACKEND_PUBLIC_URL or RENDER_EXTERNAL_URL
+# in deployments where the frontend and API are hosted on different origins.
+RENDER_BASE_URL = (os.getenv("BACKEND_PUBLIC_URL") or os.getenv("RENDER_EXTERNAL_URL") or "").rstrip("/")
 
 # DB dependency
 def get_db():
@@ -116,7 +117,9 @@ def verify_password(plain, hashed):
 
 def fix_image_url(url: Optional[str]) -> Optional[str]:
     """Replace localhost URLs with the production base URL."""
-    if url and "localhost:8000" in url:
+    if url and url.startswith("/images/") and RENDER_BASE_URL:
+        return f"{RENDER_BASE_URL}{url}"
+    if url and "localhost:8000" in url and RENDER_BASE_URL:
         return url.replace("http://localhost:8000", RENDER_BASE_URL)
     return url
 
@@ -312,6 +315,119 @@ def get_teacher_profile_for_user(user: models.ErpUser, db: Session) -> models.Te
     if not profile:
         raise HTTPException(status_code=404, detail="Teacher profile not found")
     return profile
+
+def get_teacher_class_section_ids(teacher: models.TeacherProfile, db: Session) -> Set[int]:
+    assignments = db.query(models.TeacherSubjectAssignment).filter(
+        models.TeacherSubjectAssignment.teacher_id == teacher.id
+    ).all()
+    class_section_ids = {assignment.class_section_id for assignment in assignments if assignment.class_section_id}
+    if teacher.class_teacher_of:
+        label = teacher.class_teacher_of.strip().lower()
+        for class_section in db.query(models.ClassSection).filter(models.ClassSection.is_active == True).all():
+            if label == f"class {class_section.class_name} {class_section.section}".lower():
+                class_section_ids.add(class_section.id)
+    return class_section_ids
+
+def get_student_class_section_ids(student: models.StudentProfile, db: Session) -> Set[int]:
+    class_section_ids = set()
+    if student.class_section_id:
+        class_section_ids.add(student.class_section_id)
+    enrollments = db.query(models.StudentClassEnrollment).filter(
+        models.StudentClassEnrollment.student_id == student.id,
+        models.StudentClassEnrollment.is_current == True,
+    ).all()
+    class_section_ids.update(enrollment.class_section_id for enrollment in enrollments if enrollment.class_section_id)
+    if not class_section_ids and student.class_name and student.section:
+        fallback_sections = db.query(models.ClassSection).filter(
+            models.ClassSection.class_name == student.class_name,
+            models.ClassSection.section == student.section,
+            models.ClassSection.is_active == True,
+        ).all()
+        class_section_ids.update(section.id for section in fallback_sections)
+    return class_section_ids
+
+def get_teacher_accessible_student_ids(teacher: models.TeacherProfile, db: Session) -> Set[int]:
+    class_section_ids = get_teacher_class_section_ids(teacher, db)
+    if not class_section_ids:
+        return set()
+    enrolled_ids = {
+        enrollment.student_id
+        for enrollment in db.query(models.StudentClassEnrollment).filter(
+            models.StudentClassEnrollment.class_section_id.in_(list(class_section_ids)),
+            models.StudentClassEnrollment.is_current == True,
+        ).all()
+    }
+    profile_ids = {
+        profile.id
+        for profile in db.query(models.StudentProfile).filter(
+            models.StudentProfile.class_section_id.in_(list(class_section_ids)),
+            models.StudentProfile.deleted_at.is_(None),
+        ).all()
+    }
+    for class_section in db.query(models.ClassSection).filter(models.ClassSection.id.in_(list(class_section_ids))).all():
+        legacy_profiles = db.query(models.StudentProfile).filter(
+            models.StudentProfile.class_name == class_section.class_name,
+            models.StudentProfile.section == class_section.section,
+            models.StudentProfile.deleted_at.is_(None),
+        ).all()
+        profile_ids.update(profile.id for profile in legacy_profiles)
+    return enrolled_ids | profile_ids
+
+def get_class_section_student_ids(class_section_id: int, db: Session) -> Set[int]:
+    enrolled_ids = {
+        enrollment.student_id
+        for enrollment in db.query(models.StudentClassEnrollment).filter(
+            models.StudentClassEnrollment.class_section_id == class_section_id,
+            models.StudentClassEnrollment.is_current == True,
+        ).all()
+    }
+    profile_ids = {
+        profile.id
+        for profile in db.query(models.StudentProfile).filter(
+            models.StudentProfile.class_section_id == class_section_id,
+            models.StudentProfile.deleted_at.is_(None),
+        ).all()
+    }
+    class_section = db.query(models.ClassSection).filter(models.ClassSection.id == class_section_id).first()
+    if class_section:
+        legacy_profiles = db.query(models.StudentProfile).filter(
+            models.StudentProfile.class_name == class_section.class_name,
+            models.StudentProfile.section == class_section.section,
+            models.StudentProfile.deleted_at.is_(None),
+        ).all()
+        profile_ids.update(profile.id for profile in legacy_profiles)
+    return enrolled_ids | profile_ids
+
+def require_teacher_class_access(teacher: models.TeacherProfile, class_section_id: int, db: Session):
+    if class_section_id not in get_teacher_class_section_ids(teacher, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher is not assigned to this class section")
+
+def require_teacher_student_access(teacher: models.TeacherProfile, student: models.StudentProfile, db: Session):
+    student_section_ids = get_student_class_section_ids(student, db)
+    teacher_section_ids = get_teacher_class_section_ids(teacher, db)
+    if not student_section_ids.intersection(teacher_section_ids):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Teacher is not assigned to this student")
+
+def get_erp_viewable_class_section_ids(user: models.ErpUser, db: Session) -> Set[int]:
+    if user.role == "teacher":
+        return get_teacher_class_section_ids(get_teacher_profile_for_user(user, db), db)
+    if user.role == "student":
+        return get_student_class_section_ids(get_student_profile_for_user(user, db), db)
+    if user.role == "guardian":
+        class_section_ids = set()
+        for student_id in get_guardian_student_ids(user, db):
+            student = db.query(models.StudentProfile).filter(
+                models.StudentProfile.id == student_id,
+                models.StudentProfile.deleted_at.is_(None),
+            ).first()
+            if student:
+                class_section_ids.update(get_student_class_section_ids(student, db))
+        return class_section_ids
+    return set()
+
+def require_erp_class_section_access(user: models.ErpUser, class_section_id: int, db: Session):
+    if class_section_id not in get_erp_viewable_class_section_ids(user, db):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied for this class section")
 
 def build_student_summary(student: models.StudentProfile, db: Session) -> schemas.StudentSummary:
     user = db.query(models.ErpUser).filter(models.ErpUser.id == student.user_id).first()
@@ -1890,49 +2006,28 @@ def get_teacher_dashboard(
     from datetime import date as date_type
     profile = get_teacher_profile_for_user(user, db)
 
-    # Discover teacher's assigned class sections
-    assignments = db.query(models.TeacherSubjectAssignment).filter(
-        models.TeacherSubjectAssignment.teacher_id == profile.id
-    ).all()
-    assigned_cs_ids = list({a.class_section_id for a in assignments if a.class_section_id})
+    assigned_cs_ids = sorted(get_teacher_class_section_ids(profile, db))
+    accessible_student_ids = get_teacher_accessible_student_ids(profile, db)
 
-    # Filter students to only the teacher's classes
-    if assigned_cs_ids:
-        enrolled_ids = {
-            e.student_id
-            for e in db.query(models.StudentClassEnrollment).filter(
-                models.StudentClassEnrollment.class_section_id.in_(assigned_cs_ids),
-                models.StudentClassEnrollment.is_current == True,
-            ).all()
-        }
-        profile_ids = {
-            p.id
-            for p in db.query(models.StudentProfile).filter(
-                models.StudentProfile.class_section_id.in_(assigned_cs_ids),
-                models.StudentProfile.deleted_at.is_(None),
-            ).all()
-        }
-        all_ids = enrolled_ids | profile_ids
+    if accessible_student_ids:
         students = db.query(models.StudentProfile).filter(
-            models.StudentProfile.id.in_(list(all_ids)),
+            models.StudentProfile.id.in_(list(accessible_student_ids)),
             models.StudentProfile.deleted_at.is_(None),
         ).order_by(
             models.StudentProfile.class_name,
             models.StudentProfile.section,
             models.StudentProfile.roll_no,
         ).all()
+        leaves = db.query(models.LeaveRequest).filter(
+            models.LeaveRequest.student_id.in_(list(accessible_student_ids))
+        ).order_by(models.LeaveRequest.created_at.desc()).all()
+        marks = db.query(models.MarkEntry).filter(
+            models.MarkEntry.student_id.in_(list(accessible_student_ids))
+        ).order_by(models.MarkEntry.exam_date.desc()).all()
     else:
-        # No assignments yet — show all students as fallback
-        students = db.query(models.StudentProfile).filter(
-            models.StudentProfile.deleted_at.is_(None),
-        ).order_by(
-            models.StudentProfile.class_name,
-            models.StudentProfile.section,
-            models.StudentProfile.roll_no,
-        ).all()
-
-    leaves = db.query(models.LeaveRequest).order_by(models.LeaveRequest.created_at.desc()).all()
-    marks = db.query(models.MarkEntry).order_by(models.MarkEntry.exam_date.desc()).all()
+        students = []
+        leaves = []
+        marks = []
 
     student_summaries = build_student_summaries_batch(students, db)
 
@@ -2100,6 +2195,7 @@ def create_message_thread(
         teacher = find_class_teacher_for_student(student, db)
     elif user.role == "teacher":
         teacher = get_teacher_profile_for_user(user, db)
+        require_teacher_student_access(teacher, student, db)
         link = db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).first()
         guardian_user_id = link.guardian_user_id if link else None
     else:
@@ -2303,17 +2399,19 @@ def update_leave_request(
     obj = db.query(models.LeaveRequest).filter(models.LeaveRequest.id == leave_id).first()
     if not obj:
         raise HTTPException(status_code=404, detail="Leave request not found")
-    obj.status = payload.status
-    obj.reviewer_note = payload.reviewer_note
-    obj.teacher_id = teacher.id
     student = db.query(models.StudentProfile).filter(
         models.StudentProfile.id == obj.student_id,
         models.StudentProfile.deleted_at.is_(None),
     ).first()
-    if student:
-        create_notification(db, "erp", student.user_id, f"Leave {payload.status}", payload.reviewer_note or f"Your leave request was {payload.status}.", "leave", "/erp")
-        for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
-            create_notification(db, "erp", link.guardian_user_id, f"Leave {payload.status}", f"{student.admission_no}'s leave request was {payload.status}.", "leave", "/erp")
+    if not student:
+        raise HTTPException(status_code=404, detail="Student not found")
+    require_teacher_student_access(teacher, student, db)
+    obj.status = payload.status
+    obj.reviewer_note = payload.reviewer_note
+    obj.teacher_id = teacher.id
+    create_notification(db, "erp", student.user_id, f"Leave {payload.status}", payload.reviewer_note or f"Your leave request was {payload.status}.", "leave", "/erp")
+    for link in db.query(models.GuardianStudent).filter(models.GuardianStudent.student_id == student.id).all():
+        create_notification(db, "erp", link.guardian_user_id, f"Leave {payload.status}", f"{student.admission_no}'s leave request was {payload.status}.", "leave", "/erp")
     db.commit()
     db.refresh(obj)
     return obj
@@ -2347,6 +2445,7 @@ def create_mark_entry(
     ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+    require_teacher_student_access(teacher, student, db)
     percent = (payload.marks_obtained / payload.max_marks) * 100
     obj = models.MarkEntry(
         student_id=payload.student_id,
@@ -2624,6 +2723,9 @@ def add_student(
     db: Session = Depends(get_db),
 ):
     teacher = get_teacher_profile_for_user(user, db)
+    if not payload.class_section_id:
+        raise HTTPException(status_code=400, detail="Class section is required")
+    require_teacher_class_access(teacher, payload.class_section_id, db)
     if db.query(models.ErpUser).filter(models.ErpUser.email == payload.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(models.StudentProfile).filter(models.StudentProfile.admission_no == payload.admission_no).first():
@@ -2705,6 +2807,7 @@ def update_student_status(
     ).first()
     if not profile:
         raise HTTPException(status_code=404, detail="Student not found")
+    require_teacher_student_access(teacher, profile, db)
     student_user = db.query(models.ErpUser).filter(models.ErpUser.id == profile.user_id).first()
 
     profile.status = payload.status
@@ -2721,9 +2824,12 @@ def get_all_students(
     user: models.ErpUser = Depends(get_current_erp_user),
     db: Session = Depends(get_db),
 ):
-    if user.role not in ("teacher", "admin"):
-        raise HTTPException(status_code=403, detail="Not authorized")
+    teacher = get_teacher_profile_for_user(user, db)
+    accessible_student_ids = get_teacher_accessible_student_ids(teacher, db)
+    if not accessible_student_ids:
+        return []
     students = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id.in_(list(accessible_student_ids)),
         models.StudentProfile.deleted_at.is_(None),
     ).order_by(
         models.StudentProfile.class_name,
@@ -2779,23 +2885,10 @@ def get_class_section_students(
     user: models.ErpUser = Depends(get_current_erp_user),
     db: Session = Depends(get_db),
 ):
+    teacher = get_teacher_profile_for_user(user, db)
+    require_teacher_class_access(teacher, class_section_id, db)
     # Students formally enrolled
-    enrolled_ids = {
-        e.student_id
-        for e in db.query(models.StudentClassEnrollment).filter(
-            models.StudentClassEnrollment.class_section_id == class_section_id,
-            models.StudentClassEnrollment.is_current == True,
-        ).all()
-    }
-    # Students linked via profile.class_section_id (added without formal enrollment)
-    profile_ids = {
-        p.id
-        for p in db.query(models.StudentProfile).filter(
-            models.StudentProfile.class_section_id == class_section_id,
-            models.StudentProfile.deleted_at.is_(None),
-        ).all()
-    }
-    all_ids = enrolled_ids | profile_ids
+    all_ids = get_class_section_student_ids(class_section_id, db)
     if not all_ids:
         return []
     profiles = db.query(models.StudentProfile).filter(
@@ -2850,32 +2943,33 @@ def get_class_attendance(
     db: Session = Depends(get_db),
 ):
     teacher = get_teacher_profile_for_user(user, db)
+    require_teacher_class_access(teacher, class_section_id, db)
     enrollments = db.query(models.StudentClassEnrollment).filter(
         models.StudentClassEnrollment.class_section_id == class_section_id,
         models.StudentClassEnrollment.is_current == True,
     ).all()
-    student_ids = [e.student_id for e in enrollments]
+    enrollment_map = {enrollment.student_id: enrollment for enrollment in enrollments}
+    student_ids = get_class_section_student_ids(class_section_id, db)
     records = db.query(models.AttendanceRecord).filter(
-        models.AttendanceRecord.student_id.in_(student_ids),
+        models.AttendanceRecord.student_id.in_(list(student_ids)),
         models.AttendanceRecord.date == attendance_date,
-    ).all()
+    ).all() if student_ids else []
     record_map = {r.student_id: r for r in records}
     result = []
-    for enrollment in enrollments:
-        student_profile = db.query(models.StudentProfile).filter(
-            models.StudentProfile.id == enrollment.student_id,
-            models.StudentProfile.deleted_at.is_(None),
-        ).first()
-        if not student_profile:
-            continue
+    profiles = db.query(models.StudentProfile).filter(
+        models.StudentProfile.id.in_(list(student_ids)),
+        models.StudentProfile.deleted_at.is_(None),
+    ).all() if student_ids else []
+    for student_profile in profiles:
         student_user = db.query(models.ErpUser).filter(
             models.ErpUser.id == student_profile.user_id
         ).first() if student_profile else None
-        record = record_map.get(enrollment.student_id)
+        enrollment = enrollment_map.get(student_profile.id)
+        record = record_map.get(student_profile.id)
         result.append({
-            "student_id": enrollment.student_id,
+            "student_id": student_profile.id,
             "student_name": student_user.full_name if student_user else "Unknown",
-            "roll_no": enrollment.roll_no,
+            "roll_no": enrollment.roll_no if enrollment else student_profile.roll_no,
             "status": record.status if record else "present",
             "note": record.note if record else None,
             "record_id": record.id if record else None,
@@ -2892,6 +2986,11 @@ def bulk_mark_attendance(
     db: Session = Depends(get_db),
 ):
     teacher = get_teacher_profile_for_user(user, db)
+    require_teacher_class_access(teacher, payload.class_section_id, db)
+    class_student_ids = get_class_section_student_ids(payload.class_section_id, db)
+    submitted_student_ids = {record.student_id for record in payload.records}
+    if not submitted_student_ids.issubset(class_student_ids):
+        raise HTTPException(status_code=403, detail="Attendance records include students outside this class section")
     for record_data in payload.records:
         existing = db.query(models.AttendanceRecord).filter(
             models.AttendanceRecord.student_id == record_data.student_id,
@@ -2905,6 +3004,7 @@ def bulk_mark_attendance(
         else:
             enrollment = db.query(models.StudentClassEnrollment).filter(
                 models.StudentClassEnrollment.student_id == record_data.student_id,
+                models.StudentClassEnrollment.class_section_id == payload.class_section_id,
                 models.StudentClassEnrollment.is_current == True,
             ).first()
             db.add(models.AttendanceRecord(
@@ -2929,7 +3029,13 @@ def get_exam_schedules(
 ):
     query = db.query(models.ExamSchedule)
     if class_section_id:
+        require_erp_class_section_access(user, class_section_id, db)
         query = query.filter(models.ExamSchedule.class_section_id == class_section_id)
+    else:
+        viewable_class_section_ids = get_erp_viewable_class_section_ids(user, db)
+        if not viewable_class_section_ids:
+            return []
+        query = query.filter(models.ExamSchedule.class_section_id.in_(list(viewable_class_section_ids)))
     exams = query.order_by(models.ExamSchedule.exam_date.asc()).all()
     result = []
     for exam in exams:
@@ -2958,6 +3064,7 @@ def get_timetable(
     user: models.ErpUser = Depends(get_current_erp_user),
     db: Session = Depends(get_db),
 ):
+    require_erp_class_section_access(user, class_section_id, db)
     slots = db.query(models.TimetableSlot).filter(
         models.TimetableSlot.class_section_id == class_section_id,
     ).order_by(models.TimetableSlot.day_of_week, models.TimetableSlot.period_no).all()
@@ -2988,16 +3095,24 @@ def get_student_analytics(
     user: models.ErpUser = Depends(get_current_erp_user),
     db: Session = Depends(get_db),
 ):
-    if user.role == "student":
-        profile = get_student_profile_for_user(user, db)
-        if profile.id != student_profile_id:
-            raise HTTPException(status_code=403, detail="Access denied")
     student = db.query(models.StudentProfile).filter(
         models.StudentProfile.id == student_profile_id,
         models.StudentProfile.deleted_at.is_(None),
     ).first()
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
+    if user.role == "student":
+        profile = get_student_profile_for_user(user, db)
+        if profile.id != student_profile_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role == "guardian":
+        if student_profile_id not in get_guardian_student_ids(user, db):
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif user.role == "teacher":
+        teacher = get_teacher_profile_for_user(user, db)
+        require_teacher_student_access(teacher, student, db)
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     enrollments = db.query(models.StudentClassEnrollment).filter(
         models.StudentClassEnrollment.student_id == student_profile_id
@@ -3098,6 +3213,7 @@ def get_class_analytics(
     db: Session = Depends(get_db),
 ):
     teacher = get_teacher_profile_for_user(user, db)
+    require_teacher_class_access(teacher, class_section_id, db)
     enrollments = db.query(models.StudentClassEnrollment).filter(
         models.StudentClassEnrollment.class_section_id == class_section_id,
         models.StudentClassEnrollment.is_current == True,
