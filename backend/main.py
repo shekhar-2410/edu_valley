@@ -15,6 +15,8 @@ import os
 import secrets
 import urllib.error
 import urllib.request
+
+# pyrefly: ignore [missing-import]
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -800,6 +802,8 @@ def root():
 
 @app.get("/health")
 @app.get("/api/health")
+@app.head("/health")
+@app.head("/api/health")
 def health(db: Session = Depends(get_db)):
     try:
         db.execute(text("SELECT 1"))
