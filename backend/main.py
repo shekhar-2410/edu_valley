@@ -76,13 +76,10 @@ ensure_lightweight_migrations()
 
 app = FastAPI(title="School Management API")
 
-# CORS
-_raw_origins = os.getenv("CORS_ORIGINS", "http://localhost:5173")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
-
+# CORS - Allow any origin with credentials using origin regex mirroring
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_allowed_origins,
+    allow_origin_regex=r"https?://.*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
