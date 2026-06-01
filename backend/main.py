@@ -37,6 +37,8 @@ models.Base.metadata.create_all(bind=engine)
 def ensure_lightweight_migrations():
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
+    dialect = engine.dialect.name
+
     if "contacts" in table_names:
         columns = {column["name"] for column in inspector.get_columns("contacts")}
         with engine.begin() as connection:
@@ -59,14 +61,16 @@ def ensure_lightweight_migrations():
         if "deleted_at" in columns:
             continue
         with engine.begin() as connection:
-            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN deleted_at DATETIME"))
+            dt_type = "TIMESTAMP WITH TIME ZONE" if dialect == "postgresql" else "DATETIME"
+            connection.execute(text(f"ALTER TABLE {table_name} ADD COLUMN deleted_at {dt_type}"))
     if "stored_images" in table_names:
         columns = {column["name"] for column in inspector.get_columns("stored_images")}
         with engine.begin() as connection:
             if "thumbnail_content_type" not in columns:
                 connection.execute(text("ALTER TABLE stored_images ADD COLUMN thumbnail_content_type VARCHAR(50)"))
             if "thumbnail_data" not in columns:
-                connection.execute(text("ALTER TABLE stored_images ADD COLUMN thumbnail_data BLOB"))
+                blob_type = "BYTEA" if dialect == "postgresql" else "BLOB"
+                connection.execute(text(f"ALTER TABLE stored_images ADD COLUMN thumbnail_data {blob_type}"))
 
 ensure_lightweight_migrations()
 
